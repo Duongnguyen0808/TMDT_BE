@@ -1,7 +1,7 @@
 const Order = require("../models/Order");
 
 const placeOrder = async (req, res) => {
-  const newOrder = new Order({ ...req.body, userId: req.user.id });
+  const newOrder = new Order(req.body);
   try {
     await newOrder.save();
     res.status(201).json({

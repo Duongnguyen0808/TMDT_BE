@@ -24,7 +24,7 @@ const UserSchema = new mongoose.Schema(
     profile: {
       type: String,
       default:
-        "https://bookvexe.vn/wp-content/uploads/2023/04/chon-loc-25-avatar-facebook-mac-dinh-chat-nhat_2.jpg",
+        "https://ui-avatars.com/api/?name=User&background=6366f1&color=fff&size=200",
     },
   },
   { timestamps: true }

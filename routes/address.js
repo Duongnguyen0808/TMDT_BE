@@ -6,8 +6,10 @@ router.post("/",verifyTokenAndAuthorization,addressController.addAddress);
 
 router.get("/default",verifyTokenAndAuthorization,addressController.getDefaultAddress);
 router.get("/all",verifyTokenAndAuthorization,addressController.getAddress);
+router.get("/recent",verifyTokenAndAuthorization,addressController.getRecentAddresses);
 
 router.delete("/:id",verifyTokenAndAuthorization,addressController.deleteAddress);
 router.patch("/default/:id",verifyTokenAndAuthorization,addressController.setAddressDdefault);
+router.patch("/use/:id",verifyTokenAndAuthorization,addressController.useAddress);
 
 module.exports = router;

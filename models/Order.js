@@ -25,7 +25,12 @@ const OrderSchema = new mongoose.Schema(
       required: true,
     },
     storeAddress: { type: String, required: true },
-    paymentMethod: { type: String, required: true },
+    paymentMethod: {
+      type: String,
+      required: true,
+      default: "Stripe",
+      enum: ["Stripe", "PayPal", "Paypal", "Card"],
+    },
     paymentStatus: {
       type: String,
       enum: ["Pending", "Completed", "Failed"],
@@ -34,7 +39,7 @@ const OrderSchema = new mongoose.Schema(
     orderStatus: {
       type: String,
       enum: [
-        "Placed",
+        "Pending",
         "Preparing",
         "Manual",
         "Delivered",

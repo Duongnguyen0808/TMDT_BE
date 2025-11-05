@@ -1,72 +1,71 @@
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 
-// Kiểm tra token
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
+
   if (authHeader) {
     const token = authHeader.split(" ")[1];
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+
+    jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
       if (err) {
-        return res.status(403).json("Token is not valid!");
+        return res
+          .status(403)
+          .json({ status: false, message: "Token is not valid" });
       }
-      req.user = user; // 👈 user sẽ có {id, userType, email}
+
+      req.user = user;
+
       next();
     });
   } else {
-    return res.status(401).json("You are not authenticated!");
+    return res
+      .status(401)
+      .json({ status: false, message: "You are not authenticated" });
   }
 };
 
-// Cho phép mọi role hợp lệ
 const verifyTokenAndAuthorization = (req, res, next) => {
   verifyToken(req, res, () => {
     if (
-      req.user.userType === 'Client' ||
-      req.user.userType === 'Admin' ||
-      req.user.userType === 'Vendor' ||
-      req.user.userType === 'Driver'
+      req.user.userType === "Client" ||
+      req.user.userType === "Vendor" ||
+      req.user.userType === "Admin" ||
+      req.user.userType === "Driver"
     ) {
       next();
     } else {
-      res.status(403).json("You are not allowed to do that!");
+      return res.status(403).json({
+        status: false,
+        message: "You are not allowed to perfom this action",
+      });
     }
   });
 };
 
 const verifyVendor = (req, res, next) => {
   verifyToken(req, res, () => {
-    if (req.user.userType === 'Admin' || req.user.userType === 'Vendor') {
+    if (req.user.userType === "Vendor" || req.user.userType === "Admin") {
       next();
     } else {
-      res.status(403).json("You are not allowed to do that!");
+      return res.status(403).json({
+        status: false,
+        message: "You are not allowed to perfom this action",
+      });
     }
   });
 };
 
 const verifyAdmin = (req, res, next) => {
   verifyToken(req, res, () => {
-    if (req.user.userType === 'Admin') {
+    if (req.user.userType === "Admin") {
       next();
     } else {
-      res.status(403).json("You are not allowed to do that!");
+      return res.status(403).json({
+        status: false,
+        message: "You are not allowed to perfom this action",
+      });
     }
   });
 };
 
-const verifyDriver = (req, res, next) => {
-  verifyToken(req, res, () => {
-    if (req.user.userType === 'Driver') {
-      next();
-    } else {
-      res.status(403).json("You are not allowed to do that!");
-    }
-  });
-};
-
-module.exports = {
-  verifyToken,
-  verifyTokenAndAuthorization,
-  verifyVendor,
-  verifyAdmin,
-  verifyDriver,
-};
+module.exports = { verifyTokenAndAuthorization, verifyVendor, verifyAdmin };
