@@ -5,6 +5,12 @@ module.exports = {
     try {
       const user = await User.findById(req.user.id);
 
+      if (!user) {
+        return res
+          .status(404)
+          .json({ status: false, message: "User not found or deleted" });
+      }
+
       const { password, __v, otp, updatedAt, createdAt, ...userData } =
         user._doc;
 
@@ -29,6 +35,8 @@ module.exports = {
       if (userOtp === user.otp) {
         user.verification = true;
         user.otp = "none";
+        // clear expiration once user is verified
+        user.expireAt = undefined;
 
         await user.save();
 

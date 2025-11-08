@@ -49,6 +49,8 @@ module.exports = {
           process.env.SECRET
         ).toString(),
         otp: otp,
+        // auto-delete after 10 minutes if not verified
+        expireAt: new Date(Date.now() + 10 * 60 * 1000),
       });
 
       // SAVE USER

@@ -10,6 +10,7 @@ const UserRoute = require("./routes/user");
 const AddressRoute = require("./routes/address");
 const CartRoute = require("./routes/cart");
 const OrderRoute = require("./routes/order");
+const PaymentRoute = require("./routes/payment");
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use("/api/rating", RatingRoute);
 app.use("/api/address", AddressRoute);
 app.use("/api/cart", CartRoute);
 app.use("/api/orders", OrderRoute);
+app.use("/payment", PaymentRoute);
 
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
