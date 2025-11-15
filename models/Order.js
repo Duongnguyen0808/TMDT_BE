@@ -38,15 +38,7 @@ const OrderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: [
-        "Pending",
-        "Preparing",
-        "Manual",
-        "Delivered",
-        "Cancelled",
-        "Ready",
-        "Ou_for_Delivery",
-      ],
+      enum: ["Pending", "Preparing", "Delivered", "Cancelled"],
       default: "Pending",
     },
     storeId: {
@@ -62,8 +54,16 @@ const OrderSchema = new mongoose.Schema(
     promoCode: { type: String, default: "" },
     discountAmount: { type: Number },
     note: { type: String },
+    cancellationReason: { type: String, default: "" },
   },
   { timestamps: true }
 );
+
+// Indexes cho query hiệu quả
+OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ storeId: 1, orderStatus: 1 });
+OrderSchema.index({ paymentStatus: 1 });
+OrderSchema.index({ orderStatus: 1 });
+OrderSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Order", OrderSchema);

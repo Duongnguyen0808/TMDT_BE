@@ -1,0 +1,117 @@
+{
+  "auth": {
+    "login_success": "Login successful",
+    "login_failed": "Invalid email or password",
+    "register_success": "Registration successful",
+    "email_exists": "Email already exists",
+    "password_min_length": "Password must be at least 8 characters",
+    "otp_sent": "OTP code has been sent",
+    "otp_verified": "Verification successful",
+    "otp_invalid": "Invalid OTP code",
+    "phone_verified": "Phone number verified",
+    "token_invalid": "Invalid token",
+    "unauthorized": "Unauthorized access"
+  },
+  "user": {
+    "profile_updated": "Profile updated successfully",
+    "user_not_found": "User not found",
+    "phone_verification_required": "Please verify your phone number for better experience"
+  },
+  "product": {
+    "created": "Product created successfully",
+    "updated": "Product updated successfully",
+    "deleted": "Product deleted successfully",
+    "not_found": "Product not found",
+    "out_of_stock": "Product is out of stock",
+    "insufficient_stock": "Insufficient stock",
+    "fetched": "Products fetched successfully"
+  },
+  "cart": {
+    "added": "Added to cart",
+    "updated": "Cart updated successfully",
+    "removed": "Removed from cart",
+    "cleared": "Cart cleared successfully",
+    "fetched": "Cart fetched successfully",
+    "item_not_found": "Item not found in cart"
+  },
+  "order": {
+    "placed": "Order placed successfully",
+    "cancelled": "Order cancelled successfully",
+    "confirmed": "Order confirmed successfully",
+    "shipped": "Order has been shipped",
+    "delivered": "Order delivered successfully",
+    "payment_verified": "Payment verified successfully",
+    "not_found": "Order not found",
+    "cannot_cancel": "Cannot cancel this order",
+    "fetched": "Orders fetched successfully",
+    "phone_not_verified_warning": "You haven't verified your phone number. Please verify to receive order notifications."
+  },
+  "store": {
+    "created": "Store created successfully",
+    "updated": "Store updated successfully",
+    "deleted": "Store deleted successfully",
+    "not_found": "Store not found",
+    "already_exists": "You already have a store",
+    "fetched": "Store information fetched successfully"
+  },
+  "category": {
+    "created": "Category created successfully",
+    "updated": "Category updated successfully",
+    "deleted": "Category deleted successfully",
+    "not_found": "Category not found",
+    "fetched": "Categories fetched successfully"
+  },
+  "voucher": {
+    "created": "Voucher created successfully",
+    "updated": "Voucher updated successfully",
+    "deleted": "Voucher deleted successfully",
+    "applied": "Voucher applied successfully",
+    "not_found": "Voucher not found",
+    "expired": "Voucher has expired",
+    "invalid": "Invalid voucher",
+    "min_order_not_met": "Order does not meet minimum value"
+  },
+  "reservation": {
+    "created": "Product reserved successfully",
+    "cancelled": "Reservation cancelled",
+    "expired": "Reservation has expired",
+    "not_found": "Reservation not found",
+    "stock_reserved": "Product is reserved by others"
+  },
+  "address": {
+    "created": "Address added successfully",
+    "updated": "Address updated successfully",
+    "deleted": "Address deleted successfully",
+    "not_found": "Address not found",
+    "set_default": "Set as default address successfully"
+  },
+  "favorite": {
+    "added": "Added to favorites",
+    "removed": "Removed from favorites",
+    "fetched": "Favorites fetched successfully"
+  },
+  "rating": {
+    "created": "Rating submitted successfully",
+    "updated": "Rating updated successfully",
+    "deleted": "Rating deleted successfully",
+    "not_found": "Rating not found"
+  },
+  "feedback": {
+    "created": "Feedback submitted successfully",
+    "fetched": "Feedback fetched successfully"
+  },
+  "upload": {
+    "success": "Upload successful",
+    "failed": "Upload failed",
+    "invalid_file": "Invalid file"
+  },
+  "common": {
+    "success": "Success",
+    "error": "An error occurred",
+    "invalid_request": "Invalid request",
+    "server_error": "Server error",
+    "not_found": "Not found",
+    "forbidden": "Access forbidden",
+    "validation_error": "Validation error"
+  }
+}

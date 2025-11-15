@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard - TMDT</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-store"></i> TMDT Admin</h2>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#" class="nav-item active" data-page="dashboard">
+          <i class="fas fa-chart-line"></i> Bảng Điều Khiển
+        </a>
+        <a href="#" class="nav-item" data-page="users">
+          <i class="fas fa-users"></i> Quản Lý Người Dùng
+        </a>
+        <a href="#" class="nav-item" data-page="stores">
+          <i class="fas fa-shop"></i> Quản Lý Cửa Hàng
+        </a>
+        <a href="#" class="nav-item" data-page="products">
+          <i class="fas fa-box"></i> Quản Lý Sản Phẩm
+        </a>
+        <a href="#" class="nav-item" data-page="orders">
+          <i class="fas fa-shopping-cart"></i> Quản Lý Đơn Hàng
+        </a>
+        <a href="#" class="nav-item" data-page="feedback">
+          <i class="fas fa-comment"></i> Phản Hồi
+        </a>
+        <a href="#" class="nav-item" data-page="vouchers">
+          <i class="fas fa-ticket-alt"></i> Quản Lý Voucher
+        </a>
+        <a href="#" class="nav-item" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i> Đăng Xuất
+        </a>
+      </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="header">
+        <h1 id="page-title">Bảng Điều Khiển</h1>
+        <div class="user-info">
+          <i class="fas fa-user-circle"></i>
+          <span id="admin-name">Quản Trị Viên</span>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <div class="content">
+        <!-- Dashboard Page -->
+        <div id="dashboard-page" class="page active">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon" style="background: #4caf50">
+                <i class="fas fa-users"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="total-users">0</h3>
+                <p>Tổng Người Dùng</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: #2196f3">
+                <i class="fas fa-store"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="total-stores">0</h3>
+                <p>Tổng Cửa Hàng</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: #ff9800">
+                <i class="fas fa-box"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="total-products">0</h3>
+                <p>Tổng Sản Phẩm</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: #9c27b0">
+                <i class="fas fa-shopping-cart"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="total-orders">0</h3>
+                <p>Tổng Đơn Hàng</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: #f44336">
+                <i class="fas fa-money-bill-wave"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="total-revenue">0đ</h3>
+                <p>Tổng Doanh Thu</p>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background: #607d8b">
+                <i class="fas fa-clock"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="pending-stores">0</h3>
+                <p>Cửa Hàng Chờ Duyệt</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="charts-section">
+            <div class="chart-card">
+              <h3>Thống Kê Đơn Hàng</h3>
+              <canvas id="ordersChart"></canvas>
+            </div>
+            <div class="chart-card">
+              <h3>Top 5 Cửa Hàng Doanh Thu Cao</h3>
+              <div id="top-stores-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users Page -->
+        <div id="users-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Người Dùng</h2>
+            <div class="filters">
+              <select id="user-type-filter">
+                <option value="">Tất cả loại</option>
+                <option value="Client">Khách hàng</option>
+                <option value="Vendor">Người bán</option>
+                <option value="Driver">Tài xế</option>
+              </select>
+              <input
+                type="text"
+                id="user-search"
+                placeholder="Tìm kiếm người dùng..."
+              />
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="users-table">
+              <thead>
+                <tr>
+                  <th>Avatar</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Loại</th>
+                  <th>Xác Minh</th>
+                  <th>Ngày Tạo</th>
+                  <th>Hành Động</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="users-pagination"></div>
+        </div>
+
+        <!-- Stores Page -->
+        <div id="stores-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Cửa Hàng</h2>
+            <div class="filters">
+              <select id="store-verification-filter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="Đang chờ duyệt">Chờ duyệt</option>
+                <option value="Đã xác minh">Đã duyệt</option>
+                <option value="Bị từ chối">Bị từ chối</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="stores-table">
+              <thead>
+                <tr>
+                  <th>Logo</th>
+                  <th>Tên Store</th>
+                  <th>Mã</th>
+                  <th>Rating</th>
+                  <th>Trạng Thái</th>
+                  <th>Xác Minh</th>
+                  <th>Hành Động</th>
+                </tr>
+              </thead>
+              <tbody id="stores-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="stores-pagination"></div>
+        </div>
+
+        <!-- Products Page -->
+        <div id="products-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Sản Phẩm</h2>
+            <div class="filters">
+              <input
+                type="text"
+                id="product-search"
+                placeholder="Tìm kiếm sản phẩm..."
+              />
+            </div>
+          </div>
+          <div class="products-grid" id="products-grid"></div>
+          <div class="pagination" id="products-pagination"></div>
+        </div>
+
+        <!-- Orders Page -->
+        <div id="orders-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Đơn Hàng</h2>
+            <div class="filters">
+              <select id="order-status-filter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="Pending">Chờ xử lý</option>
+                <option value="Preparing">Đang chuẩn bị</option>
+                <option value="Delivered">Đã giao</option>
+                <option value="Cancelled">Đã hủy</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="orders-table">
+              <thead>
+                <tr>
+                  <th>Mã ĐH</th>
+                  <th>Khách Hàng</th>
+                  <th>Store</th>
+                  <th>Tổng Tiền</th>
+                  <th>Thanh Toán</th>
+                  <th>Trạng Thái</th>
+                  <th>Ngày Tạo</th>
+                  <th>Hành Động</th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="orders-pagination"></div>
+        </div>
+
+        <!-- Feedback Page -->
+        <div id="feedback-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Phản Hồi</h2>
+            <div class="filters">
+              <select id="feedback-status-filter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="Pending">Chờ xử lý</option>
+                <option value="In Progress">Đang xử lý</option>
+                <option value="Resolved">Đã giải quyết</option>
+                <option value="Closed">Đã đóng</option>
+              </select>
+              <select id="feedback-type-filter">
+                <option value="">Tất cả loại</option>
+                <option value="Bug">Lỗi</option>
+                <option value="Feature Request">Yêu cầu tính năng</option>
+                <option value="Complaint">Khiếu nại</option>
+                <option value="Suggestion">Góp ý</option>
+              </select>
+            </div>
+          </div>
+          <div id="feedback-list"></div>
+          <div class="pagination" id="feedback-pagination"></div>
+        </div>
+
+        <!-- Vouchers Page -->
+        <div id="vouchers-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Voucher</h2>
+            <div class="filters">
+              <input
+                type="text"
+                id="voucher-search"
+                placeholder="Tìm kiếm mã voucher..."
+              />
+              <button class="btn btn-primary" onclick="openVoucherModal()">
+                <i class="fas fa-plus"></i> Tạo Voucher
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="vouchers-table">
+              <thead>
+                <tr>
+                  <th>Mã Voucher</th>
+                  <th>Tiêu Đề</th>
+                  <th>Loại</th>
+                  <th>Giá Trị</th>
+                  <th>Ngày Bắt Đầu</th>
+                  <th>Ngày Kết Thúc</th>
+                  <th>Đã Dùng/Giới Hạn</th>
+                  <th>Trạng Thái</th>
+                  <th>Hành Động</th>
+                </tr>
+              </thead>
+              <tbody id="vouchers-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="vouchers-pagination"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal for Store Verification -->
+    <div id="verifyModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Xác Minh Cửa Hàng</h2>
+        <form id="verify-form">
+          <input type="hidden" id="verify-store-id" />
+          <div class="form-group">
+            <label>Trạng thái:</label>
+            <select id="verify-status" required>
+              <option value="Đã xác minh">Đã xác minh</option>
+              <option value="Bị từ chối">Bị từ chối</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lời nhắn:</label>
+            <textarea id="verify-message" rows="4" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Xác Nhận</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Voucher Modal -->
+    <div id="voucherModal" class="modal">
+      <div class="modal-content" style="max-width: 600px">
+        <span class="close">&times;</span>
+        <h2 id="voucher-modal-title">Tạo Voucher Mới</h2>
+        <form id="voucher-form">
+          <input type="hidden" id="voucher-id" />
+
+          <div class="form-group">
+            <label>Mã Voucher: <span style="color: red">*</span></label>
+            <input
+              type="text"
+              id="voucher-code"
+              placeholder="VD: GIAM50K"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Tiêu Đề:</label>
+            <input
+              type="text"
+              id="voucher-title"
+              placeholder="VD: Giảm 50K cho đơn từ 200K"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Mô Tả:</label>
+            <textarea
+              id="voucher-description"
+              rows="3"
+              placeholder="Mô tả chi tiết voucher..."
+            ></textarea>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px">
+            <div class="form-group">
+              <label>Loại Giảm Giá: <span style="color: red">*</span></label>
+              <select id="voucher-type" required>
+                <option value="percentage">Phần Trăm (%)</option>
+                <option value="fixed">Số Tiền Cố Định (đ)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Giá Trị: <span style="color: red">*</span></label>
+              <input
+                type="number"
+                id="voucher-value"
+                placeholder="VD: 10 hoặc 50000"
+                required
+              />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px">
+            <div class="form-group">
+              <label>Giảm Tối Đa (đ):</label>
+              <input
+                type="number"
+                id="voucher-max-discount"
+                placeholder="VD: 100000"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Đơn Tối Thiểu (đ):</label>
+              <input
+                type="number"
+                id="voucher-min-order"
+                placeholder="VD: 200000"
+                value="0"
+              />
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px">
+            <div class="form-group">
+              <label>Ngày Bắt Đầu:</label>
+              <input type="datetime-local" id="voucher-valid-from" />
+            </div>
+
+            <div class="form-group">
+              <label>Ngày Kết Thúc:</label>
+              <input type="datetime-local" id="voucher-valid-until" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Giới Hạn Sử Dụng:</label>
+            <input
+              type="number"
+              id="voucher-usage-limit"
+              placeholder="Để trống = không giới hạn"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="voucher-is-active" checked />
+              Kích Hoạt Voucher
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block">
+            Lưu Voucher
+          </button>
+        </form>
+      </div>
+    </div>
+    <!-- Modal for Feedback Response -->
+    <div id="feedbackModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Phản Hồi Feedback</h2>
+        <form id="feedback-response-form">
+          <input type="hidden" id="feedback-id" />
+          <div class="form-group">
+            <label>Trạng thái:</label>
+            <select id="feedback-response-status" required>
+              <option value="Pending">Chờ xử lý</option>
+              <option value="In Progress">Đang xử lý</option>
+              <option value="Resolved">Đã giải quyết</option>
+              <option value="Closed">Đã đóng</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Độ ưu tiên:</label>
+            <select id="feedback-priority">
+              <option value="Low">Thấp</option>
+              <option value="Medium">Trung bình</option>
+              <option value="High">Cao</option>
+              <option value="Urgent">Khẩn cấp</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Phản hồi của Admin:</label>
+            <textarea id="admin-response" rows="4"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Gửi Phản Hồi</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div id="orderDetailModal" class="modal">
+      <div class="modal-content" style="max-width: 800px">
+        <span class="close">&times;</span>
+        <h2>Chi Tiết Đơn Hàng</h2>
+        <div id="order-detail-content">
+          <!-- Nội dung chi tiết đơn hàng sẽ được load ở đây -->
+        </div>
+      </div>
+    </div>
+
+    <!-- User Detail Modal -->
+    <div id="userDetailModal" class="modal">
+      <div class="modal-content" style="max-width: 700px">
+        <span class="close">&times;</span>
+        <h2>Chi Tiết Người Dùng</h2>
+        <div id="user-detail-content">
+          <!-- Nội dung chi tiết người dùng sẽ được load ở đây -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal active">
+      <div class="modal-content">
+        <h2>Đăng Nhập Admin</h2>
+        <form id="login-form">
+          <div class="form-group">
+            <label>Email:</label>
+            <input type="email" id="login-email" required />
+          </div>
+          <div class="form-group">
+            <label>Mật khẩu:</label>
+            <input type="password" id="login-password" required />
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">
+            Đăng Nhập
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/users.js"></script>
+    <script src="js/stores.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/orders.js"></script>
+    <script src="js/feedback.js"></script>
+    <script src="js/vouchers.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>

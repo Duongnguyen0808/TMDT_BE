@@ -15,4 +15,25 @@ router.get(
 
 router.get("/", verifyTokenAndAuthorization, userController.getUser);
 
+// Kiểm tra trạng thái xác minh
+router.get(
+  "/verification-status",
+  verifyTokenAndAuthorization,
+  userController.checkVerificationStatus
+);
+
+// Cập nhật FCM token
+router.post(
+  "/fcm-token",
+  verifyTokenAndAuthorization,
+  userController.updateFcmToken
+);
+
+// Xóa tài khoản
+router.delete(
+  "/delete-account",
+  verifyTokenAndAuthorization,
+  userController.deleteAccount
+);
+
 module.exports = router;

@@ -1,12 +1,27 @@
-const router = require('express').Router();
-const storeController = require('../controllers/storeController');
-const {verifyTokenAndAuthorization} = require('../middleware/verifyToken');
+const router = require("express").Router();
+const storeController = require("../controllers/storeController");
+const { verifyTokenAndAuthorization } = require("../middleware/verifyToken");
 
-router.post("/",verifyTokenAndAuthorization,storeController.addStore);
+router.post("/", verifyTokenAndAuthorization, storeController.addStore);
 
-router.get("/:code",storeController.getRandomStore);
+// Route lấy tất cả stores (đặt trước các route có params)
+router.get("/all", storeController.getAllNearByStore);
 
-router.get("/all/:code",storeController.getAllNearByStore);
+// Tìm cửa hàng gần nhất
+router.get("/nearby/search", storeController.getNearbyStores);
 
-router.get("/byId/:id",storeController.getStoreById);
+// Tính khoảng cách giao hàng
+router.get("/delivery/distance", storeController.calculateDeliveryDistance);
+
+router.get(
+  "/owner/profile",
+  verifyTokenAndAuthorization,
+  storeController.getStoreByOwner
+);
+
+router.get("/:code", storeController.getRandomStore);
+
+router.get("/all/:code", storeController.getAllNearByStore);
+
+router.get("/byId/:id", storeController.getStoreById);
 module.exports = router;

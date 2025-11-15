@@ -1,0 +1,117 @@
+{
+  "auth": {
+    "login_success": "Đăng nhập thành công",
+    "login_failed": "Email hoặc mật khẩu không đúng",
+    "register_success": "Đăng ký thành công",
+    "email_exists": "Email đã tồn tại",
+    "password_min_length": "Mật khẩu phải có ít nhất 8 ký tự",
+    "otp_sent": "Mã OTP đã được gửi",
+    "otp_verified": "Xác thực thành công",
+    "otp_invalid": "Mã OTP không hợp lệ",
+    "phone_verified": "Số điện thoại đã được xác thực",
+    "token_invalid": "Token không hợp lệ",
+    "unauthorized": "Không có quyền truy cập"
+  },
+  "user": {
+    "profile_updated": "Cập nhật hồ sơ thành công",
+    "user_not_found": "Không tìm thấy người dùng",
+    "phone_verification_required": "Vui lòng xác thực số điện thoại để có trải nghiệm tốt hơn"
+  },
+  "product": {
+    "created": "Tạo sản phẩm thành công",
+    "updated": "Cập nhật sản phẩm thành công",
+    "deleted": "Xóa sản phẩm thành công",
+    "not_found": "Không tìm thấy sản phẩm",
+    "out_of_stock": "Sản phẩm đã hết hàng",
+    "insufficient_stock": "Không đủ hàng trong kho",
+    "fetched": "Lấy danh sách sản phẩm thành công"
+  },
+  "cart": {
+    "added": "Đã thêm vào giỏ hàng",
+    "updated": "Cập nhật giỏ hàng thành công",
+    "removed": "Đã xóa khỏi giỏ hàng",
+    "cleared": "Đã xóa toàn bộ giỏ hàng",
+    "fetched": "Lấy giỏ hàng thành công",
+    "item_not_found": "Không tìm thấy sản phẩm trong giỏ hàng"
+  },
+  "order": {
+    "placed": "Đặt hàng thành công",
+    "cancelled": "Hủy đơn hàng thành công",
+    "confirmed": "Xác nhận đơn hàng thành công",
+    "shipped": "Đơn hàng đã được giao",
+    "delivered": "Đơn hàng đã được giao thành công",
+    "payment_verified": "Thanh toán đã được xác nhận",
+    "not_found": "Không tìm thấy đơn hàng",
+    "cannot_cancel": "Không thể hủy đơn hàng này",
+    "fetched": "Lấy danh sách đơn hàng thành công",
+    "phone_not_verified_warning": "Bạn chưa xác thực số điện thoại. Vui lòng xác thực để nhận được thông báo về đơn hàng."
+  },
+  "store": {
+    "created": "Tạo cửa hàng thành công",
+    "updated": "Cập nhật cửa hàng thành công",
+    "deleted": "Xóa cửa hàng thành công",
+    "not_found": "Không tìm thấy cửa hàng",
+    "already_exists": "Bạn đã có cửa hàng rồi",
+    "fetched": "Lấy thông tin cửa hàng thành công"
+  },
+  "category": {
+    "created": "Tạo danh mục thành công",
+    "updated": "Cập nhật danh mục thành công",
+    "deleted": "Xóa danh mục thành công",
+    "not_found": "Không tìm thấy danh mục",
+    "fetched": "Lấy danh sách danh mục thành công"
+  },
+  "voucher": {
+    "created": "Tạo mã giảm giá thành công",
+    "updated": "Cập nhật mã giảm giá thành công",
+    "deleted": "Xóa mã giảm giá thành công",
+    "applied": "Áp dụng mã giảm giá thành công",
+    "not_found": "Không tìm thấy mã giảm giá",
+    "expired": "Mã giảm giá đã hết hạn",
+    "invalid": "Mã giảm giá không hợp lệ",
+    "min_order_not_met": "Đơn hàng chưa đủ giá trị tối thiểu"
+  },
+  "reservation": {
+    "created": "Đã giữ hàng thành công",
+    "cancelled": "Đã hủy giữ hàng",
+    "expired": "Thời gian giữ hàng đã hết",
+    "not_found": "Không tìm thấy thông tin giữ hàng",
+    "stock_reserved": "Sản phẩm đã được giữ cho người khác"
+  },
+  "address": {
+    "created": "Thêm địa chỉ thành công",
+    "updated": "Cập nhật địa chỉ thành công",
+    "deleted": "Xóa địa chỉ thành công",
+    "not_found": "Không tìm thấy địa chỉ",
+    "set_default": "Đặt làm địa chỉ mặc định thành công"
+  },
+  "favorite": {
+    "added": "Đã thêm vào yêu thích",
+    "removed": "Đã xóa khỏi yêu thích",
+    "fetched": "Lấy danh sách yêu thích thành công"
+  },
+  "rating": {
+    "created": "Đánh giá thành công",
+    "updated": "Cập nhật đánh giá thành công",
+    "deleted": "Xóa đánh giá thành công",
+    "not_found": "Không tìm thấy đánh giá"
+  },
+  "feedback": {
+    "created": "Gửi phản hồi thành công",
+    "fetched": "Lấy danh sách phản hồi thành công"
+  },
+  "upload": {
+    "success": "Tải lên thành công",
+    "failed": "Tải lên thất bại",
+    "invalid_file": "File không hợp lệ"
+  },
+  "common": {
+    "success": "Thành công",
+    "error": "Đã có lỗi xảy ra",
+    "invalid_request": "Yêu cầu không hợp lệ",
+    "server_error": "Lỗi máy chủ",
+    "not_found": "Không tìm thấy",
+    "forbidden": "Không có quyền truy cập",
+    "validation_error": "Dữ liệu không hợp lệ"
+  }
+}

@@ -5,6 +5,28 @@ module.exports = {
     const userId = req.user.id;
     const { productId, additives, totalPrice, quantity } = req.body;
 
+    // Validation
+    if (!productId || !totalPrice || !quantity) {
+      return res.status(400).json({
+        status: false,
+        message: "Thiếu thông tin sản phẩm",
+      });
+    }
+
+    if (quantity <= 0 || totalPrice <= 0) {
+      return res.status(400).json({
+        status: false,
+        message: "Số lượng và giá phải lớn hơn 0",
+      });
+    }
+
+    if (quantity > 99) {
+      return res.status(400).json({
+        status: false,
+        message: "Số lượng tối đa là 99",
+      });
+    }
+
     let count;
     try {
       const existingProduct = await Cart.findOne({
@@ -18,7 +40,7 @@ module.exports = {
         await existingProduct.save();
         return res.status(200).json({
           status: true,
-          message: "Product quantity updated in cart.",
+          message: res.__("cart.updated"),
           cartCount: count,
         });
       } else {
@@ -33,7 +55,7 @@ module.exports = {
         count = await Cart.countDocuments({ userId: userId });
         return res.status(201).json({
           status: true,
-          message: "Product added to cart.",
+          message: "Thêm sản phẩm vào giỏ hàng thành công",
           cartCount: count,
         });
       }
@@ -50,7 +72,7 @@ module.exports = {
       const count = await Cart.countDocuments({ userId: userId });
       res.status(200).json({
         status: true,
-        message: "Product removed from cart.",
+        message: "Xóa sản phẩm khỏi giỏ hàng thành công",
         cartCount: count,
       });
     } catch (error) {
@@ -63,8 +85,9 @@ module.exports = {
       const cart = await Cart.find({ userId: userId }).populate({
         path: "productId",
         select: "imageUrl title price rating ratingCount isAvailable",
-        populate: { path: "store", select: "time coords" },
+        populate: { path: "store", select: "_id time coords" },
       });
+
       res.status(200).json({ cart });
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
@@ -90,20 +113,22 @@ module.exports = {
           cartItem.quantity -= 1;
           cartItem.totalPrice -= productPrice; // Assuming productPrice is available in the scope
           await cartItem.save();
-          return res
-            .status(200)
-            .json({ status: true, message: "Product quantity decremented." });
+          return res.status(200).json({
+            status: true,
+            message: "Giảm số lượng sản phẩm thành công",
+          });
         } else {
           await Cart.findByIdAndDelete({ _id: id });
           return res.status(400).json({
             status: false,
-            message: "Product successfully removed from cart.",
+            message: "Xóa sản phẩm khỏi giỏ hàng thành công",
           });
         }
       } else {
-        return res
-          .status(400)
-          .json({ status: false, message: "Cart item not found." });
+        return res.status(400).json({
+          status: false,
+          message: "Không tìm thấy sản phẩm trong giỏ hàng",
+        });
       }
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });

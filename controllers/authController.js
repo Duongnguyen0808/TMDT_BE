@@ -3,6 +3,7 @@ const CryptoJS = require("crypto-js");
 const jwt = require("jsonwebtoken");
 const generateOtp = require("../utils/otp_generator");
 const sendMail = require("../utils/smtp_function");
+const sendSmsOtp = require("../utils/sms_function");
 
 module.exports = {
   createUser: async (req, res) => {
@@ -16,16 +17,11 @@ module.exports = {
 
     const minPasswordLength = 8;
 
-    if (req.body.password < minPasswordLength) {
-      return res
-        .status(400)
-        .json({
-          status: false,
-          message:
-            "Password should be at least " +
-            minPasswordLength +
-            " characters long",
-        });
+    if (req.body.password.length < minPasswordLength) {
+      return res.status(400).json({
+        status: false,
+        message: res.__("auth.password_min_length"),
+      });
     }
 
     try {
@@ -34,7 +30,7 @@ module.exports = {
       if (emailExists) {
         return res
           .status(400)
-          .json({ status: false, message: "Email already exists" });
+          .json({ status: false, message: res.__("auth.email_exists") });
       }
 
       // GENERATE OTP
@@ -61,7 +57,33 @@ module.exports = {
 
       res
         .status(201)
-        .json({ status: true, message: "User successfully created." });
+        .json({ status: true, message: res.__("auth.register_success") });
+    } catch (error) {
+      res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Tạo tài khoản Admin (chỉ dùng lần đầu)
+  createAdmin: async (req, res) => {
+    const newUser = new User({
+      username: "Admin",
+      email: "admin@tmdt.com",
+      password: CryptoJS.AES.encrypt("admin123", process.env.SECRET).toString(),
+      userType: "Admin",
+      verification: true,
+      phoneVerification: true,
+      phone: "0123456789",
+      profile:
+        "https://ui-avatars.com/api/?name=Admin&background=1e3c72&color=fff",
+    });
+
+    try {
+      await newUser.save();
+      res.status(201).json({
+        status: true,
+        message:
+          "Tạo Admin thành công! Email: admin@tmdt.com, Mật khẩu: admin123",
+      });
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
     }
@@ -73,21 +95,16 @@ module.exports = {
     if (!emailRegex.test(req.body.email)) {
       return res
         .status(400)
-        .json({ status: false, message: "Email is not valid" });
+        .json({ status: false, message: "Email không hợp lệ" });
     }
 
     const minPasswordLength = 8;
 
     if (req.body.password < minPasswordLength) {
-      return res
-        .status(400)
-        .json({
-          status: false,
-          message:
-            "Password should be at least " +
-            minPasswordLength +
-            " characters long",
-        });
+      return res.status(400).json({
+        status: false,
+        message: "Mật khẩu phải có ít nhất " + minPasswordLength + " ký tự",
+      });
     }
 
     try {
@@ -96,7 +113,7 @@ module.exports = {
       if (!user) {
         return res
           .status(400)
-          .json({ status: false, message: "User not found" });
+          .json({ status: false, message: res.__("user.user_not_found") });
       }
 
       const decryptedPassword = CryptoJS.AES.decrypt(
@@ -108,7 +125,7 @@ module.exports = {
       if (depassword !== req.body.password) {
         return res
           .status(400)
-          .json({ status: false, message: "Wrong Password" });
+          .json({ status: false, message: res.__("auth.login_failed") });
       }
 
       const userToken = jwt.sign(
@@ -124,6 +141,100 @@ module.exports = {
       const { password, createdAt, updatedAt, __v, otp, ...others } = user._doc;
 
       res.status(200).json({ ...others, userToken });
+    } catch (error) {
+      res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Gửi OTP qua SMS để xác minh số điện thoại
+  sendPhoneOtp: async (req, res) => {
+    const { phone } = req.body;
+    const userId = req.user.id; // Từ JWT token
+
+    if (!phone || phone.length < 10) {
+      return res
+        .status(400)
+        .json({ status: false, message: "Số điện thoại không hợp lệ" });
+    }
+
+    try {
+      // Kiểm tra số điện thoại đã được sử dụng chưa
+      const phoneExists = await User.findOne({
+        phone: phone,
+        phoneVerification: true,
+        _id: { $ne: userId },
+      });
+
+      if (phoneExists) {
+        return res
+          .status(400)
+          .json({ status: false, message: "Số điện thoại đã được sử dụng" });
+      }
+
+      // Tạo OTP
+      const otp = generateOtp();
+
+      // Cập nhật OTP và số điện thoại
+      await User.findByIdAndUpdate(userId, {
+        phone: phone,
+        otp: otp,
+      });
+
+      // Gửi OTP qua SMS (định dạng quốc tế: +84)
+      let phoneFormatted = phone;
+      if (phone.startsWith("0")) {
+        phoneFormatted = "+84" + phone.substring(1);
+      } else if (!phone.startsWith("+")) {
+        phoneFormatted = "+84" + phone;
+      }
+
+      const smsResult = await sendSmsOtp(phoneFormatted, otp);
+
+      if (smsResult.success) {
+        res.status(200).json({
+          status: true,
+          message: "OTP đã được gửi đến số điện thoại của bạn",
+        });
+      } else {
+        res.status(500).json({
+          status: false,
+          message: "Không thể gửi OTP. Vui lòng thử lại sau.",
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Xác minh OTP số điện thoại
+  verifyPhoneOtp: async (req, res) => {
+    const { otp } = req.body;
+    const userId = req.user.id;
+
+    try {
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return res
+          .status(404)
+          .json({ status: false, message: "Không tìm thấy người dùng" });
+      }
+
+      if (user.otp !== otp) {
+        return res
+          .status(400)
+          .json({ status: false, message: "OTP không chính xác" });
+      }
+
+      // Xác minh thành công
+      user.phoneVerification = true;
+      user.otp = "none";
+      await user.save();
+
+      res.status(200).json({
+        status: true,
+        message: "Xác minh số điện thoại thành công",
+      });
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
     }

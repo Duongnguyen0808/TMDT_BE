@@ -36,7 +36,7 @@ const verifyTokenAndAuthorization = (req, res, next) => {
     } else {
       return res.status(403).json({
         status: false,
-        message: "You are not allowed to perfom this action",
+        message: "You are not allowed to perform this action",
       });
     }
   });
@@ -49,7 +49,7 @@ const verifyVendor = (req, res, next) => {
     } else {
       return res.status(403).json({
         status: false,
-        message: "You are not allowed to perfom this action",
+        message: "You are not allowed to perform this action",
       });
     }
   });
@@ -62,10 +62,15 @@ const verifyAdmin = (req, res, next) => {
     } else {
       return res.status(403).json({
         status: false,
-        message: "You are not allowed to perfom this action",
+        message: "You are not allowed to perform this action",
       });
     }
   });
 };
 
-module.exports = { verifyTokenAndAuthorization, verifyVendor, verifyAdmin };
+module.exports = {
+  verifyToken,
+  verifyTokenAndAuthorization,
+  verifyVendor,
+  verifyAdmin,
+};
