@@ -2,11 +2,16 @@ const Order = require("../models/Order");
 const User = require("../models/User");
 const Cart = require("../models/Cart");
 const Voucher = require("../models/Voucher");
+const VoucherClaim = require("../models/VoucherClaim");
 const Appliances = require("../models/Appliances");
-const Reservation = require("../models/Reservation");
+const Driver = require("../models/Driver");
 const mongoose = require("mongoose");
 const {
   sendOrderStatusNotification,
+  sendOrderPlacedNotification,
+  sendReturnRequestedNotification,
+  sendReturnDecisionNotification,
+  sendRefundProcessedNotification,
 } = require("../utils/notification_service");
 
 module.exports = {
@@ -27,7 +32,7 @@ module.exports = {
         phoneWarning = res.__("order.phone_not_verified_warning");
       }
 
-      // Kiểm tra reservation và stock
+      // Kiểm tra tính khả dụng & tồn kho
       for (const item of newOrder.orderItems) {
         const product = await Appliances.findById(item.appliancesId).session(
           session
@@ -51,35 +56,8 @@ module.exports = {
           });
         }
 
-        // Kiểm tra reservation của user
-        const reservation = await Reservation.findOne({
-          userId,
-          productId: item.appliancesId,
-          status: "reserved",
-          expiresAt: { $gt: new Date() },
-        }).session(session);
-
-        if (!reservation) {
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({
-            status: false,
-            message: `Sản phẩm "${product.title}" đã hết thời gian giữ hàng. Vui lòng thêm vào giỏ lại`,
-          });
-        }
-
-        // Kiểm tra số lượng reservation khớp với order
-        if (reservation.quantity < item.quantity) {
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({
-            status: false,
-            message: `Số lượng sản phẩm "${product.title}" vượt quá số lượng đã giữ`,
-          });
-        }
-
         // Kiểm tra stock thực tế
-        if (product.stock < item.quantity) {
+        if (typeof product.stock === 'number' && product.stock < item.quantity) {
           await session.abortTransaction();
           session.endSession();
           return res.status(400).json({
@@ -93,7 +71,7 @@ module.exports = {
       await newOrder.save({ session });
       const orderId = newOrder._id;
 
-      // Cập nhật stock và soldCount
+      // Cập nhật tồn kho và số lượng đã bán
       for (const item of newOrder.orderItems) {
         await Appliances.findByIdAndUpdate(
           item.appliancesId,
@@ -103,17 +81,6 @@ module.exports = {
               soldCount: item.quantity,
             },
           },
-          { session }
-        );
-
-        // Đánh dấu reservation là confirmed
-        await Reservation.updateMany(
-          {
-            userId,
-            productId: item.appliancesId,
-            status: "reserved",
-          },
-          { status: "confirmed" },
           { session }
         );
       }
@@ -130,13 +97,22 @@ module.exports = {
         { session }
       );
 
-      // Update voucher usedCount if promoCode exists
+      // Update voucher usage if promoCode exists
       if (newOrder.promoCode) {
-        await Voucher.findOneAndUpdate(
-          { code: newOrder.promoCode.toUpperCase() },
+        const code = String(newOrder.promoCode).toUpperCase();
+        const voucher = await Voucher.findOneAndUpdate(
+          { code },
           { $inc: { usedCount: 1 } },
-          { session }
+          { session, new: true }
         );
+        if (voucher) {
+          // Mark user's claim as used
+          await VoucherClaim.findOneAndUpdate(
+            { voucher: voucher._id, user: newOrder.userId },
+            { $set: { used: true, usedAt: new Date() } },
+            { session }
+          );
+        }
       }
 
       // Commit transaction
@@ -154,6 +130,13 @@ module.exports = {
         response.warning = phoneWarning;
         response.requirePhoneVerification = false; // Không bắt buộc, chỉ khuyến khích
       }
+
+      // Gửi thông báo đơn hàng mới (nếu có fcm token)
+      try {
+        if (user && user.fcm && user.fcm !== 'none') {
+          await sendOrderPlacedNotification(user.fcm, orderId, newOrder.grandTotal || newOrder.orderTotal || 0);
+        }
+      } catch (e) { }
 
       res.status(201).json(response);
     } catch (error) {
@@ -205,7 +188,7 @@ module.exports = {
         storeId: id,
       })
         .select(
-          "userId deliveryAddress orderItems deliveryFee storeId storeCoords recipientCoords orderStatus createdAt updatedAt orderTotal grandTotal"
+          "userId deliveryAddress orderItems deliveryFee storeId storeCoords recipientCoords orderStatus createdAt updatedAt orderTotal grandTotal driverId"
         )
         .populate({
           path: "userId",
@@ -217,7 +200,7 @@ module.exports = {
         })
         .populate({
           path: "orderItems.appliancesId",
-          select: "title imageUrl time price",
+          select: "title imageUrl time price stock",
         })
         .populate({
           path: "deliveryAddress",
@@ -278,11 +261,22 @@ module.exports = {
             message: "Vui lòng cung cấp lý do hủy đơn",
           });
         }
+
+        // free driver on cancel
+        if (existingOrder.driverId) {
+          try {
+            const drv = await Driver.findOne({ user: existingOrder.driverId });
+            if (drv) {
+              drv.status = "available";
+              await drv.save();
+            }
+          } catch (e) { }
+        }
       }
 
-      // Chỉ Vendor/Admin mới được chuyển sang Preparing/Delivered
+      // Chỉ Vendor/Admin mới được chuyển sang Preparing/Delivering/Delivered
       if (
-        (orderStatus === "Preparing" || orderStatus === "Delivered") &&
+        (orderStatus === "Preparing" || orderStatus === "Delivering" || orderStatus === "Delivered") &&
         userType !== "Vendor" &&
         userType !== "Admin"
       ) {
@@ -313,12 +307,20 @@ module.exports = {
             });
           }
 
-          // Hoàn lại số lượng voucher đã dùng
+          // Hoàn lại số lượng voucher đã dùng và reset claim
           if (updatedOrder.promoCode) {
-            await Voucher.findOneAndUpdate(
-              { code: updatedOrder.promoCode.toUpperCase() },
-              { $inc: { usedCount: -1 } }
+            const code = String(updatedOrder.promoCode).toUpperCase();
+            const voucher = await Voucher.findOneAndUpdate(
+              { code },
+              { $inc: { usedCount: -1 } },
+              { new: true }
             );
+            if (voucher) {
+              await VoucherClaim.findOneAndUpdate(
+                { voucher: voucher._id, user: updatedOrder.userId },
+                { $set: { used: false }, $unset: { usedAt: 1 } }
+              );
+            }
           }
         }
 
@@ -330,6 +332,31 @@ module.exports = {
             orderId
           );
         }
+
+        // Free driver when delivered
+        if (orderStatus === "Delivered" && updatedOrder.driverId) {
+          try {
+            const drv = await Driver.findOne({ user: updatedOrder.driverId });
+            if (drv) {
+              drv.status = "available";
+              await drv.save();
+            }
+          } catch (e) { }
+        }
+
+        // Emit socket events for live updates
+        try {
+          const io = req.app.get("io");
+          if (io) {
+            io.emit("order:updated", { orderId: String(updatedOrder._id), status: orderStatus });
+            if ((orderStatus === "Delivered" || orderStatus === "Cancelled") && updatedOrder.driverId) {
+              try {
+                const drv = await Driver.findOne({ user: updatedOrder.driverId });
+                if (drv) io.emit("driver:status", { driverId: String(drv.user), status: drv.status });
+              } catch (_) { }
+            }
+          }
+        } catch (_) { }
 
         res
           .status(200)
@@ -359,7 +386,7 @@ module.exports = {
         })
         .populate({
           path: "orderItems.appliancesId",
-          select: "title imageUrl price",
+          select: "title imageUrl price stock",
         })
         .populate({
           path: "deliveryAddress",
@@ -435,6 +462,180 @@ module.exports = {
       }
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Client requests a return/refund on a delivered order
+  requestReturn: async (req, res) => {
+    const orderId = req.params.id;
+    const userId = req.user.id;
+    const { reason = "" } = req.body || {};
+
+    try {
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+      if (String(order.userId) !== String(userId)) {
+        return res.status(403).json({ status: false, message: "Bạn không có quyền yêu cầu trả hàng đơn này" });
+      }
+      if (order.orderStatus !== "Delivered") {
+        return res.status(400).json({ status: false, message: "Chỉ có thể yêu cầu trả hàng cho đơn đã giao" });
+      }
+      if (order.returnStatus && order.returnStatus !== "None") {
+        return res.status(400).json({ status: false, message: "Đơn hàng đã có yêu cầu trả/hoàn" });
+      }
+
+      order.returnStatus = "Requested";
+      order.returnReason = reason;
+      order.returnRequestedAt = new Date();
+      await order.save();
+
+      // Notify user of request submission
+      try {
+        const usr = await User.findById(userId).select('fcm');
+        if (usr && usr.fcm && usr.fcm !== 'none') {
+          await sendReturnRequestedNotification(usr.fcm, orderId, reason);
+        }
+      } catch (_) { }
+
+      // Emit update
+      try {
+        const io = req.app.get("io");
+        if (io) io.emit("order:updated", { orderId: String(order._id), returnStatus: order.returnStatus });
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: "Đã gửi yêu cầu trả hàng/hoàn tiền" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Vendor/Admin approve or reject return request
+  reviewReturn: async (req, res) => {
+    const orderId = req.params.id;
+    const userType = req.user.userType;
+    const { action, note = "" } = req.body || {}; // action: approve | reject
+
+    if (userType !== "Vendor" && userType !== "Admin") {
+      return res.status(403).json({ status: false, message: "Bạn không có quyền duyệt trả hàng" });
+    }
+
+    if (!action || !["approve", "reject"].includes(action)) {
+      return res.status(400).json({ status: false, message: "Hành động không hợp lệ" });
+    }
+
+    try {
+      const order = await Order.findById(orderId);
+      if (!order) return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      if (order.returnStatus !== "Requested") {
+        return res.status(400).json({ status: false, message: "Đơn không ở trạng thái chờ duyệt trả hàng" });
+      }
+
+      if (action === "approve") {
+        order.returnStatus = "Approved";
+      } else {
+        order.returnStatus = "Rejected";
+      }
+      order.returnProcessedAt = new Date();
+      if (note) order.note = note;
+      await order.save();
+
+      // Notify user of decision
+      try {
+        const usr = await User.findById(order.userId).select('fcm');
+        if (usr && usr.fcm && usr.fcm !== 'none') {
+          await sendReturnDecisionNotification(usr.fcm, orderId, action === 'approve' ? 'approve' : 'reject');
+        }
+      } catch (_) { }
+
+      try {
+        const io = req.app.get("io");
+        if (io) io.emit("order:updated", { orderId: String(order._id), returnStatus: order.returnStatus });
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: action === "approve" ? "Đã duyệt trả hàng" : "Đã từ chối trả hàng" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Vendor/Admin confirms returned items and performs refund/stock rollback
+  confirmReturned: async (req, res) => {
+    const orderId = req.params.id;
+    const userType = req.user.userType;
+    const { refundAmount } = req.body || {}; // optional override amount
+
+    if (userType !== "Vendor" && userType !== "Admin") {
+      return res.status(403).json({ status: false, message: "Bạn không có quyền xác nhận trả hàng" });
+    }
+
+    try {
+      const order = await Order.findById(orderId);
+      if (!order) return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      if (!order.returnStatus || !["Approved", "Requested"].includes(order.returnStatus)) {
+        return res.status(400).json({ status: false, message: "Đơn không ở trạng thái chấp nhận trả hàng" });
+      }
+
+      // Rollback stock and soldCount
+      for (const item of order.orderItems) {
+        await Appliances.findByIdAndUpdate(item.appliancesId, {
+          $inc: { stock: item.quantity, soldCount: -item.quantity },
+        });
+      }
+
+      // Rollback voucher usage and reset claim
+      if (order.promoCode) {
+        const code = String(order.promoCode).toUpperCase();
+        const voucher = await Voucher.findOneAndUpdate(
+          { code },
+          { $inc: { usedCount: -1 } },
+          { new: true }
+        );
+        if (voucher) {
+          await VoucherClaim.findOneAndUpdate(
+            { voucher: voucher._id, user: order.userId },
+            { $set: { used: false }, $unset: { usedAt: 1 } }
+          );
+        }
+      }
+
+      // Process refund if paid
+      if (order.paymentStatus === "Completed") {
+        const amount = typeof refundAmount === "number" ? refundAmount : order.grandTotal;
+        order.refundAmount = amount;
+        order.refundMethod = order.paymentMethod;
+        order.refundAt = new Date();
+        order.paymentStatus = "Refunded";
+        order.returnStatus = "Refunded";
+        // Notify refund processed
+        try {
+          const usr = await User.findById(order.userId).select('fcm');
+          if (usr && usr.fcm && usr.fcm !== 'none') {
+            await sendRefundProcessedNotification(usr.fcm, orderId, amount);
+          }
+        } catch (_) { }
+      } else {
+        order.returnStatus = "Returned";
+        // Notify return processed without refund
+        try {
+          const usr = await User.findById(order.userId).select('fcm');
+          if (usr && usr.fcm && usr.fcm !== 'none') {
+            await sendReturnDecisionNotification(usr.fcm, orderId, 'returned');
+          }
+        } catch (_) { }
+      }
+
+      await order.save();
+
+      try {
+        const io = req.app.get("io");
+        if (io) io.emit("order:updated", { orderId: String(order._id), returnStatus: order.returnStatus });
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: "Đã xác nhận hàng trả và xử lý hoàn tiền" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
     }
   },
 };

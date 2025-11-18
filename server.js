@@ -1,6 +1,10 @@
-const express = require("express");
-const cors = require("cors");
 const dotenv = require("dotenv");
+// Load environment variables BEFORE requiring modules that use them
+dotenv.config();
+
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
 const mongoose = require("mongoose");
 const path = require("path");
 const i18n = require("i18n");
@@ -20,10 +24,44 @@ const FavoriteRoute = require("./routes/favorite");
 const FeedbackRoute = require("./routes/feedback");
 const AdminRoute = require("./routes/admin");
 const ReservationRoute = require("./routes/reservation");
-
-dotenv.config();
+const ChatRoute = require("./routes/chat");
+const DriverRoute = require("./routes/driver");
+const FcmRoute = require("./routes/fcm");
+// const PromotionRoute = require("./routes/promotion");
+// Test FCM route (added for debugging) after dotenv loaded
+const { sendPushNotification, canUseAdmin, getFcmEnvInfo } = require('./utils/notification_service');
 
 const app = express();
+const server = http.createServer(app);
+const { Server } = require("socket.io");
+const io = new Server(server, {
+  cors: { origin: "*" },
+});
+
+// socket auth
+const jwt = require("jsonwebtoken");
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!token) return next();
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = user;
+    next();
+  } catch (e) {
+    next();
+  }
+});
+
+io.on("connection", (socket) => {
+  socket.on("join", ({ conversationId }) => {
+    if (conversationId) {
+      socket.join(`conv:${conversationId}`);
+    }
+  });
+});
+
+// attach io for controllers to emit
+app.set("io", io);
 const port = process.env.PORT || 3000;
 
 // Configure i18n
@@ -72,6 +110,36 @@ app.use("/api/favorites", FavoriteRoute);
 app.use("/api/feedback", FeedbackRoute);
 app.use("/api/admin", AdminRoute);
 app.use("/api/reservation", ReservationRoute);
+app.use("/api/chat", ChatRoute);
+app.use("/api/drivers", DriverRoute);
+app.use("/api/fcm", FcmRoute);
+// app.use("/api/promotions", PromotionRoute);
+
+// Simple FCM test endpoint
+app.post('/api/test-fcm', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ success: false, message: 'Missing token' });
+    const resp = await sendPushNotification(token, 'Test Notification', 'This is a test push');
+    return res.json(resp);
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// FCM diagnostics route
+app.get('/api/fcm-status', (req, res) => {
+  try {
+    const info = getFcmEnvInfo();
+    res.json({
+      canUseAdmin: canUseAdmin(),
+      env: info,
+      note: 'SenderId mismatch usually means token belongs to a different Firebase project than these credentials.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // Auto-create default admin if not exists
 const User = require("./models/User");
@@ -103,7 +171,9 @@ mongoose.connection.once("open", async () => {
   }
 });
 
-app.listen(port, "0.0.0.0", () => {
+server.listen(port, "0.0.0.0", () => {
   console.log(`Server listening at http://0.0.0.0:${port}`);
   console.log(`Admin Dashboard: http://localhost:${port}/admin\n`);
 });
+
+// Promotions feature disabled: routes and scheduler removed

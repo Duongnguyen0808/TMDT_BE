@@ -30,28 +30,25 @@ function renderProductsGrid(products) {
             <img src="${product.imageUrl[0]}" alt="${product.title}">
             <div class="product-card-body">
                 <h4>${product.title}</h4>
-                <p style="color: #666; font-size: 14px; margin: 5px 0;">${
-                  product.category || "N/A"
-                }</p>
+                <p style="color: #666; font-size: 14px; margin: 5px 0;">${product.category || "N/A"
+        }</p>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                     <span class="product-price">${formatCurrency(
-                      product.price
-                    )}</span>
+          product.price
+        )}</span>
                     <span style="color: #FF9800;">⭐ ${product.rating.toFixed(
-                      1
-                    )}</span>
+          1
+        )}</span>
                 </div>
                 <div style="margin-top: 10px;">
-                    ${
-                      product.isAvailable
-                        ? '<span class="badge badge-success">Còn hàng</span>'
-                        : '<span class="badge badge-danger">Hết hàng</span>'
-                    }
+                    ${(typeof product.stock === 'number' ? product.stock > 0 : true) && product.isAvailable
+          ? `<span class="badge badge-success">Còn hàng${typeof product.stock === 'number' ? ` (${product.stock})` : ''}</span>`
+          : `<span class="badge badge-danger">Hết hàng</span>`
+        }
                 </div>
                 <div style="margin-top: 10px;">
-                    <button class="btn btn-danger btn-sm btn-block" onclick="deleteProduct('${
-                      product._id
-                    }')">Xóa</button>
+                    <button class="btn btn-danger btn-sm btn-block" onclick="deleteProduct('${product._id
+        }')">Xóa</button>
                 </div>
             </div>
         </div>

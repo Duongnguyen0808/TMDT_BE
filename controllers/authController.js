@@ -128,6 +128,13 @@ module.exports = {
           .json({ status: false, message: res.__("auth.login_failed") });
       }
 
+      // Optional: update FCM token if provided on login
+      if (req.body.fcmToken && typeof req.body.fcmToken === 'string' && req.body.fcmToken.length > 20) {
+        try {
+          await User.findByIdAndUpdate(user._id, { fcm: req.body.fcmToken });
+        } catch (_) { }
+      }
+
       const userToken = jwt.sign(
         {
           id: user._id,
@@ -143,6 +150,173 @@ module.exports = {
       res.status(200).json({ ...others, userToken });
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Forgot password (send OTP via email or phone)
+  forgotPassword: async (req, res) => {
+    try {
+      const { email, phone } = req.body;
+
+      if (!email && !phone) {
+        return res
+          .status(400)
+          .json({ status: false, message: "Vui lòng cung cấp email hoặc số điện thoại" });
+      }
+
+      let user;
+      if (email) {
+        user = await User.findOne({ email });
+      } else if (phone) {
+        user = await User.findOne({ phone });
+      }
+
+      if (!user) {
+        return res
+          .status(404)
+          .json({ status: false, message: "Không tìm thấy người dùng" });
+      }
+
+      const otp = generateOtp();
+      user.resetPasswordOTP = otp;
+      user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 phút
+      await user.save();
+
+      if (email) {
+        await sendMail(user.email, otp);
+      } else if (phone) {
+        // chuẩn hoá +84
+        let phoneFormatted = phone;
+        if (phone.startsWith("0")) {
+          phoneFormatted = "+84" + phone.substring(1);
+        } else if (!phone.startsWith("+")) {
+          phoneFormatted = "+84" + phone;
+        }
+        await sendSmsOtp(phoneFormatted, otp);
+      }
+
+      return res.status(200).json({
+        status: true,
+        message: "Mã OTP đặt lại mật khẩu đã được gửi",
+      });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Reset password using OTP
+  resetPassword: async (req, res) => {
+    try {
+      const { email, phone, otp, newPassword } = req.body;
+
+      if ((!email && !phone) || !otp || !newPassword) {
+        return res.status(400).json({
+          status: false,
+          message: "Thiếu thông tin: email/phone, otp, newPassword",
+        });
+      }
+
+      if (newPassword.length < 8) {
+        return res
+          .status(400)
+          .json({ status: false, message: "Mật khẩu phải có ít nhất 8 ký tự" });
+      }
+
+      let user;
+      if (email) {
+        user = await User.findOne({ email });
+      } else if (phone) {
+        user = await User.findOne({ phone });
+      }
+
+      if (!user) {
+        return res
+          .status(404)
+          .json({ status: false, message: "Không tìm thấy người dùng" });
+      }
+
+      if (!user.resetPasswordOTP || !user.resetPasswordExpires) {
+        return res.status(400).json({
+          status: false,
+          message: "Vui lòng yêu cầu OTP đặt lại mật khẩu trước",
+        });
+      }
+
+      if (new Date() > new Date(user.resetPasswordExpires)) {
+        return res
+          .status(400)
+          .json({ status: false, message: "OTP đã hết hạn" });
+      }
+
+      if (user.resetPasswordOTP !== otp) {
+        return res
+          .status(400)
+          .json({ status: false, message: "OTP không chính xác" });
+      }
+
+      // Update password
+      user.password = CryptoJS.AES.encrypt(
+        newPassword,
+        process.env.SECRET
+      ).toString();
+      user.resetPasswordOTP = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      return res.status(200).json({
+        status: true,
+        message: "Đặt lại mật khẩu thành công",
+      });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  // Change password for authenticated user
+  changePassword: async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { oldPassword, newPassword } = req.body;
+
+      if (!oldPassword || !newPassword) {
+        return res
+          .status(400)
+          .json({ status: false, message: "Thiếu thông tin mật khẩu" });
+      }
+
+      if (newPassword.length < 8) {
+        return res
+          .status(400)
+          .json({ status: false, message: "Mật khẩu phải có ít nhất 8 ký tự" });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ status: false, message: "Không tìm thấy người dùng" });
+      }
+
+      const decrypted = CryptoJS.AES.decrypt(user.password, process.env.SECRET);
+      const currentPassword = decrypted.toString(CryptoJS.enc.Utf8);
+
+      if (currentPassword !== oldPassword) {
+        return res
+          .status(400)
+          .json({ status: false, message: "Mật khẩu hiện tại không đúng" });
+      }
+
+      user.password = CryptoJS.AES.encrypt(
+        newPassword,
+        process.env.SECRET
+      ).toString();
+      await user.save();
+
+      return res
+        .status(200)
+        .json({ status: true, message: "Đổi mật khẩu thành công" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
     }
   },
 

@@ -1,4 +1,5 @@
 const Cart = require("../models/Cart");
+const Appliances = require("../models/Appliances");
 
 module.exports = {
   addProductToCart: async (req, res) => {
@@ -29,14 +30,26 @@ module.exports = {
 
     let count;
     try {
+      // Kiểm tra tồn kho trước khi cộng dồn vào giỏ
+      const product = await Appliances.findById(productId).select('title stock');
+      if (!product) {
+        return res.status(404).json({ status: false, message: 'Sản phẩm không tồn tại' });
+      }
       const existingProduct = await Cart.findOne({
         userId: userId,
         productId: productId,
       });
       count = await Cart.countDocuments({ userId: userId });
       if (existingProduct) {
+        const newQty = existingProduct.quantity + quantity;
+        if (typeof product.stock === 'number' && newQty > product.stock) {
+          return res.status(400).json({
+            status: false,
+            message: `Vượt quá tồn kho của "${product.title}" (còn ${product.stock})`,
+          });
+        }
         existingProduct.totalPrice += totalPrice * quantity;
-        existingProduct.quantity += quantity;
+        existingProduct.quantity = newQty;
         await existingProduct.save();
         return res.status(200).json({
           status: true,
@@ -44,6 +57,12 @@ module.exports = {
           cartCount: count,
         });
       } else {
+        if (typeof product.stock === 'number' && quantity > product.stock) {
+          return res.status(400).json({
+            status: false,
+            message: `Vượt quá tồn kho của "${product.title}" (còn ${product.stock})`,
+          });
+        }
         const newCartItem = new Cart({
           userId: userId,
           productId: productId,
@@ -84,7 +103,7 @@ module.exports = {
     try {
       const cart = await Cart.find({ userId: userId }).populate({
         path: "productId",
-        select: "imageUrl title price rating ratingCount isAvailable",
+        select: "imageUrl title price rating ratingCount isAvailable stock",
         populate: { path: "store", select: "_id time coords" },
       });
 

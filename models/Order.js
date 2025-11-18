@@ -33,12 +33,12 @@ const OrderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Completed", "Failed"],
+      enum: ["Pending", "Completed", "Failed", "Refunded"],
       default: "Pending",
     },
     orderStatus: {
       type: String,
-      enum: ["Pending", "Preparing", "Delivered", "Cancelled"],
+      enum: ["Pending", "Preparing", "Delivering", "Delivered", "Cancelled"],
       default: "Pending",
     },
     storeId: {
@@ -55,6 +55,25 @@ const OrderSchema = new mongoose.Schema(
     discountAmount: { type: Number },
     note: { type: String },
     cancellationReason: { type: String, default: "" },
+    // Return/Refund
+    returnStatus: {
+      type: String,
+      enum: [
+        "None",
+        "Requested",
+        "Approved",
+        "Rejected",
+        "Returned",
+        "Refunded",
+      ],
+      default: "None",
+    },
+    returnReason: { type: String, default: "" },
+    returnRequestedAt: { type: Date },
+    returnProcessedAt: { type: Date },
+    refundAmount: { type: Number, default: 0 },
+    refundMethod: { type: String, default: "" },
+    refundAt: { type: Date },
   },
   { timestamps: true }
 );

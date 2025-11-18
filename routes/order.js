@@ -28,6 +28,23 @@ router.put(
   orderController.confirmReceived
 );
 
+// Returns/Refunds
+router.post(
+  "/:id/return-request",
+  verifyTokenAndAuthorization,
+  orderController.requestReturn
+);
+router.put(
+  "/:id/return-review",
+  verifyTokenAndAuthorization,
+  orderController.reviewReturn
+);
+router.put(
+  "/:id/return-confirm",
+  verifyTokenAndAuthorization,
+  orderController.confirmReturned
+);
+
 // VNPay payment URL creation
 router.post("/payment", verifyTokenAndAuthorization, createVnpayPayment);
 
