@@ -10,6 +10,13 @@ router.get(
   orderController.getOrderDetails
 );
 router.get("/", verifyTokenAndAuthorization, orderController.getUserOrders);
+// Advanced (pagination + multi-status) first to avoid shadowing
+router.get(
+  "/store/:id",
+  verifyTokenAndAuthorization,
+  orderController.getStoreOrdersAdvanced
+);
+// Legacy single-status route retained for backward compatibility
 router.get(
   "/store/:id/:status",
   verifyTokenAndAuthorization,
@@ -19,6 +26,20 @@ router.put(
   "/:id",
   verifyTokenAndAuthorization,
   orderController.updateOrderStatus
+);
+
+// Logistics progression (Admin only)
+router.patch(
+  "/:id/logistics",
+  verifyTokenAndAuthorization,
+  orderController.advanceLogistics
+);
+
+// Bulk legacy logistics sync
+router.post(
+  "/logistics-sync",
+  verifyTokenAndAuthorization,
+  orderController.syncLogisticsLegacy
 );
 
 // Confirm received order
@@ -48,4 +69,8 @@ router.put(
 // VNPay payment URL creation
 router.post("/payment", verifyTokenAndAuthorization, createVnpayPayment);
 
+// Driver proposal workflow
+router.post("/driver/accept/:id", verifyTokenAndAuthorization, orderController.acceptDriverProposal);
+router.post("/driver/decline/:id", verifyTokenAndAuthorization, orderController.declineDriverProposal);
+router.post("/driver/next/:id", verifyTokenAndAuthorization, orderController.nextDriverProposal);
 module.exports = router;

@@ -21,6 +21,16 @@ async function loadDashboard() {
       );
       document.getElementById("pending-stores").textContent =
         data.data.overview.pendingStores || 0;
+      const psElem = document.getElementById("pending-shippers");
+      if (psElem) psElem.textContent = data.data.overview.pendingShippers || 0;
+      // Click card to navigate to Shippers page
+      const shipperCard = document.getElementById("pending-shippers-card");
+      if (shipperCard) {
+        shipperCard.onclick = () => {
+          const navItem = document.querySelector('.nav-item[data-page="shippers"]');
+          if (navItem) navItem.click();
+        };
+      }
 
       // Load orders chart
       loadOrdersChart(data.data.orders);
@@ -108,11 +118,10 @@ async function loadTopStores() {
           (store, index) => `
                 <div class="top-store-item">
                     <div class="store-rank">#${index + 1}</div>
-                    <img src="${
-                      store.logoUrl ||
-                      store.imageUrl ||
-                      "https://via.placeholder.com/50"
-                    }" 
+                    <img src="${store.logoUrl ||
+            store.imageUrl ||
+            "https://via.placeholder.com/50"
+            }" 
                          alt="${store.title}"
                          onerror="this.src='https://via.placeholder.com/50?text=Store'">
                     <div class="top-store-info">

@@ -90,66 +90,59 @@ module.exports = {
   },
 
   loginUser: async (req, res) => {
-    const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
-
-    if (!emailRegex.test(req.body.email)) {
-      return res
-        .status(400)
-        .json({ status: false, message: "Email không hợp lệ" });
-    }
-
-    const minPasswordLength = 8;
-
-    if (req.body.password < minPasswordLength) {
-      return res.status(400).json({
-        status: false,
-        message: "Mật khẩu phải có ít nhất " + minPasswordLength + " ký tự",
-      });
-    }
-
     try {
-      const user = await User.findOne({ email: req.body.email });
+      const emailRaw = String(req.body.email || '').trim().toLowerCase();
+      const passwordRaw = String(req.body.password || '');
+      const fcmToken = req.body.fcmToken;
 
+      const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(emailRaw)) {
+        return res.status(400).json({ status: false, code: 'INVALID_EMAIL', message: 'Email không hợp lệ' });
+      }
+
+      const minPasswordLength = 6; // Chấp nhận tối thiểu 6 nếu đăng ký công khai ban đầu
+      if (passwordRaw.length < minPasswordLength) {
+        return res.status(400).json({ status: false, code: 'PASSWORD_TOO_SHORT', message: `Mật khẩu phải >= ${minPasswordLength} ký tự` });
+      }
+
+      const user = await User.findOne({ email: emailRaw });
       if (!user) {
-        return res
-          .status(400)
-          .json({ status: false, message: res.__("user.user_not_found") });
+        return res.status(400).json({ status: false, code: 'USER_NOT_FOUND', message: 'Không tìm thấy tài khoản' });
       }
 
-      const decryptedPassword = CryptoJS.AES.decrypt(
-        user.password,
-        process.env.SECRET
-      );
-      const depassword = decryptedPassword.toString(CryptoJS.enc.Utf8);
-
-      if (depassword !== req.body.password) {
-        return res
-          .status(400)
-          .json({ status: false, message: res.__("auth.login_failed") });
+      // Giải mã mật khẩu lưu trữ
+      let depassword;
+      try {
+        depassword = CryptoJS.AES.decrypt(user.password, process.env.SECRET).toString(CryptoJS.enc.Utf8);
+      } catch (e) {
+        return res.status(500).json({ status: false, code: 'DECRYPT_ERROR', message: 'Không giải mã được mật khẩu' });
       }
 
-      // Optional: update FCM token if provided on login
-      if (req.body.fcmToken && typeof req.body.fcmToken === 'string' && req.body.fcmToken.length > 20) {
-        try {
-          await User.findByIdAndUpdate(user._id, { fcm: req.body.fcmToken });
-        } catch (_) { }
+      if (depassword !== passwordRaw) {
+        return res.status(400).json({ status: false, code: 'WRONG_PASSWORD', message: 'Sai mật khẩu' });
       }
 
-      const userToken = jwt.sign(
-        {
-          id: user._id,
-          userType: user.userType,
-          email: user.email,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: "21d" }
-      );
+      // Nếu tài khoản chưa xác minh email hoặc phone có thể cảnh báo (không chặn login nếu là Driver)
+      if (!user.verification && user.userType !== 'Driver') {
+        // Có thể yêu cầu xác minh nhưng vẫn cho login để họ hoàn tất OTP
+      }
 
+      // Cập nhật FCM token nếu gửi kèm
+      if (fcmToken && typeof fcmToken === 'string' && fcmToken.length > 20) {
+        try { await User.findByIdAndUpdate(user._id, { fcm: fcmToken }); } catch (_) { }
+      }
+
+      const jwtSecret = (process.env.JWT_SECRET || '').trim();
+      if (!jwtSecret) {
+        return res.status(500).json({ status: false, code: 'JWT_SECRET_MISSING', message: 'Thiếu JWT_SECRET trên server' });
+      }
+
+      const userToken = jwt.sign({ id: user._id, userType: user.userType, email: user.email }, jwtSecret, { expiresIn: '21d' });
       const { password, createdAt, updatedAt, __v, otp, ...others } = user._doc;
-
-      res.status(200).json({ ...others, userToken });
+      return res.status(200).json({ status: true, code: 'LOGIN_OK', data: others, userToken });
     } catch (error) {
-      res.status(500).json({ status: false, message: error.message });
+      console.error('[loginUser][ERROR]', error);
+      return res.status(500).json({ status: false, code: 'SERVER_ERROR', message: error.message });
     }
   },
 

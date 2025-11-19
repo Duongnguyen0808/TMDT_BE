@@ -26,7 +26,10 @@ const AdminRoute = require("./routes/admin");
 const ReservationRoute = require("./routes/reservation");
 const ChatRoute = require("./routes/chat");
 const DriverRoute = require("./routes/driver");
+const ShipperRoute = require("./routes/shipper");
 const FcmRoute = require("./routes/fcm");
+const HubRoute = require("./routes/hub");
+const ShipmentRoute = require("./routes/shipment");
 // const PromotionRoute = require("./routes/promotion");
 // Test FCM route (added for debugging) after dotenv loaded
 const { sendPushNotification, canUseAdmin, getFcmEnvInfo } = require('./utils/notification_service');
@@ -86,6 +89,20 @@ mongoose
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Request logging for shipper & upload public endpoints
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/shippers') || req.path.startsWith('/api/upload/public/shipper-doc')) {
+    const start = Date.now();
+    const bodyPreview = (() => {
+      try { return JSON.stringify(req.body).slice(0, 500); } catch { return '[unserializable]'; }
+    })();
+    console.log(`[REQ] ${req.method} ${req.path} ip=${req.ip} body=${bodyPreview}`);
+    res.on('finish', () => {
+      console.log(`[RES] ${req.method} ${req.path} status=${res.statusCode} dur=${Date.now() - start}ms`);
+    });
+  }
+  next();
+});
 
 // Initialize i18n middleware
 app.use(i18n.init);
@@ -112,7 +129,10 @@ app.use("/api/admin", AdminRoute);
 app.use("/api/reservation", ReservationRoute);
 app.use("/api/chat", ChatRoute);
 app.use("/api/drivers", DriverRoute);
+app.use("/api/shippers", ShipperRoute);
 app.use("/api/fcm", FcmRoute);
+app.use("/api/hubs", HubRoute);
+app.use("/api/shipments", ShipmentRoute);
 // app.use("/api/promotions", PromotionRoute);
 
 // Simple FCM test endpoint
@@ -175,5 +195,24 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`Server listening at http://0.0.0.0:${port}`);
   console.log(`Admin Dashboard: http://localhost:${port}/admin\n`);
 });
+
+// Simple scheduler to auto-advance shipments demo (every 90s try advance Creating/Consolidating only)
+const Shipment = require("./models/Shipment");
+setInterval(async () => {
+  try {
+    const pending = await Shipment.find({ status: { $in: ["Creating", "Consolidating"] } }).limit(10);
+    for (const sh of pending) {
+      const flow = ["Creating", "Consolidating", "DepartOrigin", "ArriveOrigin", "DepartLocal", "ArriveLocal", "ReadyPickup", "Completed"];
+      const idx = flow.indexOf(sh.status);
+      if (idx >= 0 && idx < flow.length - 1) {
+        sh.status = flow[idx + 1];
+        const stampKey = `${sh.status}At`;
+        if (sh.timeline && stampKey in sh.timeline) sh.timeline[stampKey] = new Date();
+        await sh.save();
+        try { io.emit("shipment:updated", { shipmentId: String(sh._id), status: sh.status }); } catch (_) { }
+      }
+    }
+  } catch (e) { }
+}, 90000);
 
 // Promotions feature disabled: routes and scheduler removed

@@ -10,8 +10,24 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
   </head>
+          <li><a href="#" onclick="showSection('logistics')">Logistics</a></li>
   <body>
     <!-- Sidebar -->
+        <section id="logistics" style="display:none">
+          <h2>Logistics</h2>
+          <h3>Hubs</h3>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Tọa độ</th><th>Hoạt động</th></tr></thead>
+            <tbody id="hubsTableBody"></tbody>
+          </table>
+          <h3 style="margin-top:24px">Shipments</h3>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead><tr><th>Code</th><th>Trạng thái</th><th>Kho tổng</th><th>Kho địa phương</th><th>Số đơn</th><th>Tiến</th></tr></thead>
+            <tbody id="shipmentsTableBody"></tbody>
+          </table>
+          <script src="/socket.io/socket.io.js"></script>
+          <script src="js/logistics.js"></script>
+        </section>
     <div class="sidebar">
       <div class="sidebar-header">
         <h2><i class="fas fa-store"></i> TMDT Admin</h2>
@@ -22,6 +38,9 @@
         </a>
         <a href="#" class="nav-item" data-page="users">
           <i class="fas fa-users"></i> Quản Lý Người Dùng
+        </a>
+        <a href="#" class="nav-item" data-page="shippers">
+          <i class="fas fa-motorcycle"></i> Duyệt Shipper
         </a>
         <a href="#" class="nav-item" data-page="stores">
           <i class="fas fa-shop"></i> Quản Lý Cửa Hàng
@@ -114,6 +133,15 @@
                 <p>Cửa Hàng Chờ Duyệt</p>
               </div>
             </div>
+            <div class="stat-card" id="pending-shippers-card" style="cursor:pointer">
+              <div class="stat-icon" style="background: #795548">
+                <i class="fas fa-motorcycle"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="pending-shippers">0</h3>
+                <p>Shipper Chờ Duyệt</p>
+              </div>
+            </div>
           </div>
 
           <div class="charts-section">
@@ -164,6 +192,44 @@
             </table>
           </div>
           <div class="pagination" id="users-pagination"></div>
+        </div>
+
+        <!-- Shippers Page -->
+        <div id="shippers-page" class="page">
+          <div class="page-header">
+            <h2>Duyệt Hồ Sơ Shipper</h2>
+            <div class="filters">
+              <select id="shipper-status-filter">
+                <option value="pending">Chờ duyệt</option>
+                <option value="approved">Đã duyệt</option>
+                <option value="rejected">Bị từ chối</option>
+              </select>
+              <button class="btn btn-primary" id="bulk-approve-btn" title="Duyệt các hồ sơ đã chọn">
+                <i class="fas fa-check"></i> Duyệt các hồ sơ đã chọn
+              </button>
+              <button class="btn btn-danger" id="bulk-reject-btn" title="Từ chối các hồ sơ đã chọn">
+                <i class="fas fa-times"></i> Từ chối các hồ sơ đã chọn
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="shippers-table">
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="shipper-select-all"/></th>
+                  <th>Người nộp</th>
+                  <th>SĐT</th>
+                  <th>Phương tiện</th>
+                  <th>Biển số</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày nộp</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="shippers-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="shippers-pagination"></div>
         </div>
 
         <!-- Stores Page -->
@@ -501,6 +567,15 @@
       </div>
     </div>
 
+    <!-- Shipper Application Detail Modal -->
+    <div id="shipperDetailModal" class="modal">
+      <div class="modal-content" style="max-width: 900px">
+        <span class="close">&times;</span>
+        <h2>Chi Tiết Hồ Sơ Shipper</h2>
+        <div id="shipper-detail-content"></div>
+      </div>
+    </div>
+
     <!-- Login Modal -->
     <div id="loginModal" class="modal active">
       <div class="modal-content">
@@ -531,6 +606,7 @@
     <script src="js/orders.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/vouchers.js"></script>
+    <script src="js/shippers.js"></script>
     <script src="js/main.js"></script>
   </body>
 </html>

@@ -33,4 +33,25 @@ const uploadImage = async (req, res) => {
   }
 };
 
-module.exports = { uploadImage };
+// Public image upload for shipper documents (no auth). Folder is forced.
+const publicUploadImage = async (req, res) => {
+  try {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+    const file = req.file;
+    if (!file) return res.status(400).json({ status: false, message: 'No file provided' });
+    const result = await cloudinary.uploader.upload(file.path, {
+      folder: 'shipper_docs',
+      resource_type: 'image',
+      overwrite: false,
+    });
+    return res.status(200).json({ status: true, secure_url: result.secure_url, url: result.secure_url, public_id: result.public_id });
+  } catch (e) {
+    return res.status(500).json({ status: false, message: e.message });
+  }
+};
+
+module.exports = { uploadImage, publicUploadImage };

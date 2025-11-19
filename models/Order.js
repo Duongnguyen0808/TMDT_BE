@@ -38,7 +38,15 @@ const OrderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["Pending", "Preparing", "Delivering", "Delivered", "Cancelled"],
+      enum: [
+        "Pending",
+        "Preparing",
+        // New intermediate: vendor finished prep, system finding driver
+        "WaitingShipper",
+        "Delivering",
+        "Delivered",
+        "Cancelled"
+      ],
       default: "Pending",
     },
     storeId: {
@@ -49,6 +57,37 @@ const OrderSchema = new mongoose.Schema(
     storeCoords: [Number],
     recipientCoords: [Number],
     driverId: { type: String, default: "" },
+    // Automated driver proposal workflow
+    proposedDriverId: { type: String, default: "" }, // user id of proposed driver
+    proposalExpiresAt: { type: Date }, // time limit for current proposal
+    proposalAttempts: { type: Number, default: 0 }, // how many drivers tried
+    proposalHistory: [{ type: String }], // list of driver user ids already proposed
+    // Khi tài xế nhận đơn
+    driverAssignedAt: { type: Date },
+    // Vị trí hiện tại của tài xế cho đơn này (cập nhật định kỳ)
+    driverLocation: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      updatedAt: { type: Date },
+    },
+    // Logistics hubs & status flow (separate from delivery orderStatus)
+    originHub: { type: mongoose.Schema.Types.ObjectId, ref: "Hub" },
+    localHub: { type: mongoose.Schema.Types.ObjectId, ref: "Hub" },
+    logisticStatus: {
+      type: String,
+      enum: [
+        "SellerPending",      // chờ shop xác nhận & chuẩn bị
+        "ToOriginHub",        // đang chuyển tới kho tổng
+        "AtOriginHub",        // đã ở kho tổng
+        "ToLocalHub",         // đang chuyển tới kho địa phương
+        "AtLocalHub",         // đã tới kho gần khách (sẵn sàng cho shipper)
+        "PickedUp",           // shipper đã lấy hàng từ kho địa phương
+        "Delivering",         // đang giao (trùng orderStatus Delivering)
+        "Delivered",          // đã giao
+        "Cancelled"           // hủy bỏ
+      ],
+      default: "SellerPending"
+    },
     rating: { type: Number, default: 3, min: 1, max: 5 },
     feedback: { type: String },
     promoCode: { type: String, default: "" },

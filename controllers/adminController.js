@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Store = require("../models/Store");
 const Appliances = require("../models/Appliances");
 const Voucher = require("../models/Voucher");
+const ShipperApplication = require("../models/ShipperApplication");
 
 module.exports = {
   // Tổng quan Dashboard
@@ -53,6 +54,11 @@ module.exports = {
         verification: "Đang chờ duyệt",
       });
 
+      // Shipper chờ duyệt
+      const pendingShippers = await ShipperApplication.countDocuments({
+        approvalStatus: "pending",
+      });
+
       res.status(200).json({
         status: true,
         data: {
@@ -63,6 +69,7 @@ module.exports = {
             totalOrders,
             totalRevenue,
             pendingStores,
+            pendingShippers,
           },
           orders: {
             pending: pendingOrders,

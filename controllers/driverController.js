@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Driver = require("../models/Driver");
 const Order = require("../models/Order");
 const Store = require("../models/Store");
+const Hub = require("../models/Hub");
 
 module.exports = {
     // Vendor tạo tài xế mới (tạo User + Driver)
@@ -132,6 +133,138 @@ module.exports = {
         }
     },
 
+    // Driver: danh sách đơn còn trống để nhận (mở cho tất cả shipper)
+    availableOrders: async (req, res) => {
+        try {
+            // Yêu cầu là hiển thị cho tất cả shipper không phân biệt vendor
+            // Fallback: hiển thị các đơn chưa có logisticStatus nhưng đang ở trạng thái Preparing
+            const orders = await Order.find({
+                driverId: "",
+                paymentStatus: { $in: ["Completed", "Pending"] },
+                $or: [
+                    { logisticStatus: "AtLocalHub" },
+                    { orderStatus: "WaitingShipper" }
+                ]
+            })
+                .select("storeId orderStatus deliveryAddress orderItems deliveryFee grandTotal orderTotal createdAt logisticStatus")
+                .populate({ path: "storeId", select: "title coords logoUrl imageUrl" })
+                .populate({ path: "orderItems.appliancesId", select: "title imageUrl price" })
+                .populate({ path: "deliveryAddress", select: "addressLine1" });
+            return res.status(200).json({ status: true, data: orders });
+        } catch (error) {
+            return res.status(500).json({ status: false, message: error.message });
+        }
+    },
+
+    // Driver: nhận đơn (claim) – atomic qua điều kiện driverId rỗng + trạng thái phù hợp
+    claimOrder: async (req, res) => {
+        try {
+            const driverUserId = req.user.id;
+            const { id } = req.params; // order id
+            // Đảm bảo user đăng nhập là tài xế (userType Driver)
+            try {
+                const u = await User.findById(driverUserId).select('userType');
+                if (!u || u.userType !== 'Driver') {
+                    return res.status(403).json({ status: false, message: 'Tài khoản không phải tài xế' });
+                }
+            } catch (_) { /* ignore */ }
+
+            // Tự động tạo hồ sơ Driver nếu chưa tồn tại (mô hình shipper tự do, bỏ quản lý vendor)
+            let driver = await Driver.findOne({ user: driverUserId });
+            if (!driver) {
+                driver = new Driver({
+                    user: driverUserId,
+                    vendor: null, // không ràng buộc vendor
+                    vehicleType: 'motorbike',
+                    vehiclePlate: '',
+                    note: '',
+                    status: 'available'
+                });
+                await driver.save();
+                console.log(`[claimOrder] Auto-created driver profile user=${driverUserId}`);
+            }
+            // Cho phép nhận nhiều đơn song song (giới hạn 5 đang giao / picked up)
+            const activeCount = await Order.countDocuments({ driverId: String(driverUserId), orderStatus: { $in: ["Delivering"] } });
+            if (activeCount >= 5) return res.status(400).json({ status: false, message: "Bạn đã đạt giới hạn 5 đơn đang giao" });
+
+            // Chỉ claim được đơn thuộc vendor của mình
+            // Truy vấn order matching điều kiện và cập nhật atomically
+            console.log(`[claimOrder] driver=${driverUserId} order=${id} activeDelivering=${activeCount}`);
+            const order = await Order.findOneAndUpdate({
+                _id: id,
+                driverId: "",
+                $or: [
+                    { logisticStatus: "AtLocalHub" },
+                    { orderStatus: "WaitingShipper" }
+                ]
+            }, {
+                $set: {
+                    driverId: String(driverUserId),
+                    driverAssignedAt: new Date(),
+                    logisticStatus: "PickedUp",
+                    orderStatus: "Delivering",
+                }
+            }, { new: true });
+            if (!order) {
+                console.warn(`[claimOrder][FAILED] order=${id} not available / race condition`);
+                return res.status(409).json({ status: false, message: "Đơn không còn sẵn sàng hoặc đã được nhận" });
+            }
+
+            // Không còn ràng buộc vendor: đơn mở cho mọi shipper
+
+            // Đánh dấu driver busy
+            // Driver chuyển busy nếu trước đó available
+            if (driver.status !== 'busy') {
+                driver.status = 'busy';
+                await driver.save();
+            }
+
+            // Socket notify
+            try {
+                const io = req.app.get("io");
+                if (io) {
+                    io.emit("order:assigned", { orderId: String(order._id), driverId: String(driverUserId) });
+                    io.emit("driver:status", { driverId: String(driverUserId), status: driver.status });
+                }
+            } catch (_) { }
+
+            console.log(`[claimOrder][SUCCESS] order=${order._id} driver=${driverUserId}`);
+            return res.status(200).json({ status: true, message: "Nhận đơn thành công", orderId: String(order._id) });
+        } catch (error) {
+            console.error('[claimOrder][ERROR]', error);
+            return res.status(500).json({ status: false, message: error.message });
+        }
+    },
+
+    // Driver: cập nhật vị trí hiện tại cho đơn – cho phép client gửi theo chu kỳ
+    updateLocation: async (req, res) => {
+        try {
+            const driverUserId = req.user.id;
+            const { id } = req.params; // order id
+            const { latitude, longitude } = req.body;
+            if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+                return res.status(400).json({ status: false, message: "Thiếu toạ độ hợp lệ" });
+            }
+            const order = await Order.findById(id);
+            if (!order) return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+            if (String(order.driverId) !== String(driverUserId)) {
+                return res.status(403).json({ status: false, message: "Bạn không phải tài xế của đơn này" });
+            }
+            order.driverLocation = { latitude, longitude, updatedAt: new Date() };
+            await order.save();
+
+            // Socket broadcast vị trí
+            try {
+                const io = req.app.get("io");
+                if (io) io.emit("driver:location", { orderId: String(order._id), driverId: String(driverUserId), latitude, longitude });
+            } catch (_) { }
+
+            return res.status(200).json({ status: true, message: "Đã cập nhật vị trí" });
+        } catch (error) {
+            return res.status(500).json({ status: false, message: error.message });
+        }
+    },
+
     // Driver: cập nhật trạng thái đơn hàng (chỉ các bước giao)
     driverUpdateOrderStatus: async (req, res) => {
         try {
@@ -157,9 +290,12 @@ module.exports = {
             // if completed delivery, free the driver
             if (status === "Delivered" && order.driverId) {
                 const drv = await Driver.findOne({ user: order.driverId });
-                if (drv && drv.status !== "available") {
-                    drv.status = "available";
-                    await drv.save();
+                if (drv) {
+                    const remaining = await Order.countDocuments({ driverId: String(order.driverId), orderStatus: { $in: ["Delivering"] }, _id: { $ne: order._id } });
+                    if (remaining === 0) {
+                        drv.status = "available";
+                        await drv.save();
+                    }
                 }
             }
             return res.status(200).json({ status: true, message: "Cập nhật trạng thái thành công" });
