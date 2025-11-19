@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const DriverSchema = new mongoose.Schema(
     {
         user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-        vendor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        vendor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
         vehicleType: { type: String, default: "motorbike" },
         vehiclePlate: { type: String, default: "" },
         status: {
