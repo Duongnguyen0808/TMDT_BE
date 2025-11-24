@@ -27,14 +27,14 @@
     }
     function renderShipments(list) {
         const el = document.getElementById('shipmentsTableBody');
-        if (!el) return; el.innerHTML = list.map(s => `<tr><td>${s.code}</td><td>${s.status}</td><td>${(s.originHub && s.originHub.code) || ''}</td><td>${(s.localHub && s.localHub.code) || ''}</td><td>${(s.orders || []).length}</td><td><button data-id='${s._id}' class='advanceBtn'>Tiến</button></td></tr>`).join('');
+        if (!el) return; el.innerHTML = list.map(s => `<tr><td>${s.code}</td><td>${s.status}</td><td>${(s.originHub && s.originHub.code) || ''}</td><td>${(s.localHub && s.localHub.code) || ''}</td><td>${(s.orders || []).length}</td><td><button data-id='${s._id}' class='advanceBtn'>Cập nhật</button></td></tr>`).join('');
     }
 
     async function advanceShipment(id) {
         try {
             await fetchJSON(API_BASE + '/api/shipments/' + id + '/advance', { method: 'PATCH' });
             loadShipments();
-        } catch (e) { alert('Advance lỗi'); }
+        } catch (e) { alert('Không thể cập nhật tiến độ'); }
     }
 
     document.addEventListener('click', e => {

@@ -181,10 +181,10 @@ function imageBox(label, url) {
 }
 
 async function approveShipper(id) {
-    if (!confirm('Duyệt hồ sơ này và cấp quyền Driver?')) return;
+    if (!confirm('Duyệt hồ sơ này và cấp quyền tài xế?')) return;
     const res = await apiCall(`/api/shippers/applications/${id}/approve`, { method: 'PUT' });
     if (res && res.status) {
-        showNotification('Đã duyệt hồ sơ shipper');
+        showNotification('Đã duyệt hồ sơ tài xế');
         loadShippers(getCurrentShipperStatus());
     } else {
         showNotification(res?.message || 'Không duyệt được hồ sơ', 'error');

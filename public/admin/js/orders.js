@@ -49,8 +49,8 @@ function renderOrdersTable(orders) {
       return `
             <tr>
                 <td>#${order._id.substring(0, 8)}</td>
-                <td>${order.userId?.username || "N/A"}</td>
-                <td>${order.storeId?.title || "N/A"}</td>
+                <td>${order.userId?.username || "Chưa có"}</td>
+                <td>${order.storeId?.title || "Chưa có"}</td>
                 <td>${formatCurrency(order.grandTotal)}</td>
                 <td>${paymentBadge}</td>
                 <td>${statusBadge}</td>
@@ -144,7 +144,7 @@ async function viewOrder(orderId) {
               <img src="${item.appliancesId?.imageUrl?.[0] || "/placeholder.png"
             }" 
                    style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
-              <span>${item.appliancesId?.title || "N/A"}</span>
+              <span>${item.appliancesId?.title || "Chưa có"}</span>
             </div>
           </td>
           <td>${formatCurrency(item.price)}</td>
@@ -188,18 +188,18 @@ async function viewOrder(orderId) {
           </div>
           <div>
             <h3 style="margin-bottom: 10px; color: #1e3c72;">Thông Tin Khách Hàng</h3>
-            <p><strong>Tên:</strong> ${order.userId?.username || "N/A"}</p>
-            <p><strong>Email:</strong> ${order.userId?.email || "N/A"}</p>
-            <p><strong>SĐT:</strong> ${order.userId?.phone || "N/A"}</p>
-            <p><strong>Địa chỉ:</strong> ${order.deliveryAddress?.addressLine || "N/A"
+            <p><strong>Tên:</strong> ${order.userId?.username || "Chưa có"}</p>
+            <p><strong>Email:</strong> ${order.userId?.email || "Chưa có"}</p>
+            <p><strong>SĐT:</strong> ${order.userId?.phone || "Chưa có"}</p>
+            <p><strong>Địa chỉ:</strong> ${order.deliveryAddress?.addressLine || "Chưa có"
         }</p>
           </div>
         </div>
 
         <div style="margin-bottom: 20px;">
           <h3 style="margin-bottom: 10px; color: #1e3c72;">Cửa Hàng</h3>
-          <p><strong>Tên:</strong> ${order.storeId?.title || "N/A"}</p>
-          <p><strong>Địa chỉ:</strong> ${order.storeAddress || "N/A"}</p>
+          <p><strong>Tên:</strong> ${order.storeId?.title || "Chưa có"}</p>
+          <p><strong>Địa chỉ:</strong> ${order.storeAddress || "Chưa có"}</p>
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -258,10 +258,17 @@ async function viewOrder(orderId) {
 // Cập nhật trạng thái đơn hàng
 async function updateOrderStatus(orderId) {
   const newStatus = document.getElementById("update-order-status").value;
+  const statusLabels = {
+    Pending: "Chờ xử lý",
+    Preparing: "Đang chuẩn bị",
+    Delivered: "Đã giao",
+    Cancelled: "Đã hủy",
+  };
+  const statusLabel = statusLabels[newStatus] || newStatus;
 
   if (
     !confirm(
-      `Bạn có chắc muốn cập nhật trạng thái đơn hàng thành "${newStatus}"?`
+      `Bạn có chắc muốn cập nhật trạng thái đơn hàng thành "${statusLabel}"?`
     )
   ) {
     return;

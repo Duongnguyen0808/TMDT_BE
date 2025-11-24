@@ -30,7 +30,7 @@ function renderProductsGrid(products) {
             <img src="${product.imageUrl[0]}" alt="${product.title}">
             <div class="product-card-body">
                 <h4>${product.title}</h4>
-                <p style="color: #666; font-size: 14px; margin: 5px 0;">${product.category || "N/A"
+                <p style="color: #666; font-size: 14px; margin: 5px 0;">${product.category || "Chưa cập nhật"
         }</p>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                     <span class="product-price">${formatCurrency(

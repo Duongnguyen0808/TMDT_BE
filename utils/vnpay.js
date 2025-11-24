@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetchFn }) => fetchFn(...args));
 
 // Sắp xếp object theo alphabet
 function sortObject(obj) {
@@ -123,8 +125,74 @@ function verifySecureHash(query, hashSecret) {
   return signed === vnp_SecureHash;
 }
 
+async function requestVnpayRefund({
+  orderId,
+  amount,
+  transactionDate,
+  transactionNo,
+  reason = "Refund order",
+  createdBy = "system",
+  transactionType,
+}) {
+  const apiUrl = (process.env.VNP_API_URL || "").trim();
+  const tmnCode = (process.env.VNP_TMNCODE || "").trim();
+  const hashSecret = (process.env.VNP_HASHSECRET || "").trim();
+  if (!apiUrl || !tmnCode || !hashSecret) {
+    throw new Error("VNPay refund env missing");
+  }
+  if (!transactionDate || !transactionNo) {
+    throw new Error("Missing VNPay transaction metadata for refund");
+  }
+
+  const requestId = `refund${Date.now()}`;
+  const createDate = formatDateYYYYMMDDHHmmss();
+  const refundAmount = Math.round(Number(amount || 0) * 100);
+  if (!refundAmount) {
+    throw new Error("Refund amount must be greater than 0");
+  }
+
+  const payload = {
+    vnp_RequestId: requestId,
+    vnp_Version: "2.1.0",
+    vnp_Command: "refund",
+    vnp_TmnCode: tmnCode,
+    vnp_TransactionType:
+      transactionType || process.env.VNP_REFUND_TYPE || "02", // 02: full refund
+    vnp_TxnRef: orderId,
+    vnp_Amount: refundAmount,
+    vnp_OrderInfo: `${reason} ${orderId}`.trim(),
+    vnp_TransactionNo: transactionNo,
+    vnp_TransactionDate: transactionDate,
+    vnp_CreateBy: createdBy,
+    vnp_CreateDate: createDate,
+    vnp_IpAddr: "127.0.0.1",
+    vnp_RefundReason: reason,
+  };
+
+  const sorted = sortObject(payload);
+  const signData = Object.keys(sorted)
+    .map((k) => `${k}=${encodeURIComponent(sorted[k]).replace(/%20/g, "+")}`)
+    .join("&");
+  const secureHash = hmacSHA512(hashSecret.trim(), signData.trim());
+  const body = { ...sorted, vnp_SecureHash: secureHash };
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  const success = data?.vnp_ResponseCode === "00";
+  return {
+    success,
+    data,
+    message: success ? "Refund success" : data?.vnp_Message || "Refund failed",
+  };
+}
+
 module.exports = {
   buildVnpParams,
   createPaymentUrl,
   verifySecureHash,
+  requestVnpayRefund,
 };

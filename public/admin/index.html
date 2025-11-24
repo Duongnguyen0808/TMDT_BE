@@ -10,19 +10,19 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
   </head>
-          <li><a href="#" onclick="showSection('logistics')">Logistics</a></li>
+          <li><a href="#" onclick="showSection('logistics')">Quản Lý Vận Hành</a></li>
   <body>
     <!-- Sidebar -->
         <section id="logistics" style="display:none">
-          <h2>Logistics</h2>
-          <h3>Hubs</h3>
+          <h2>Quản Lý Vận Hành</h2>
+          <h3>Điểm trung chuyển</h3>
           <table border="1" cellpadding="6" cellspacing="0">
             <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Tọa độ</th><th>Hoạt động</th></tr></thead>
             <tbody id="hubsTableBody"></tbody>
           </table>
-          <h3 style="margin-top:24px">Shipments</h3>
+          <h3 style="margin-top:24px">Lô hàng</h3>
           <table border="1" cellpadding="6" cellspacing="0">
-            <thead><tr><th>Code</th><th>Trạng thái</th><th>Kho tổng</th><th>Kho địa phương</th><th>Số đơn</th><th>Tiến</th></tr></thead>
+            <thead><tr><th>Mã lô</th><th>Trạng thái</th><th>Kho tổng</th><th>Kho địa phương</th><th>Số đơn</th><th>Tiến độ</th></tr></thead>
             <tbody id="shipmentsTableBody"></tbody>
           </table>
           <script src="/socket.io/socket.io.js"></script>
@@ -40,7 +40,7 @@
           <i class="fas fa-users"></i> Quản Lý Người Dùng
         </a>
         <a href="#" class="nav-item" data-page="shippers">
-          <i class="fas fa-motorcycle"></i> Duyệt Shipper
+          <i class="fas fa-motorcycle"></i> Duyệt Tài Xế
         </a>
         <a href="#" class="nav-item" data-page="stores">
           <i class="fas fa-shop"></i> Quản Lý Cửa Hàng
@@ -55,7 +55,7 @@
           <i class="fas fa-comment"></i> Phản Hồi
         </a>
         <a href="#" class="nav-item" data-page="vouchers">
-          <i class="fas fa-ticket-alt"></i> Quản Lý Voucher
+          <i class="fas fa-ticket-alt"></i> Quản Lý Mã Giảm Giá
         </a>
         <a href="#" class="nav-item" onclick="logout()">
           <i class="fas fa-sign-out-alt"></i> Đăng Xuất
@@ -139,7 +139,17 @@
               </div>
               <div class="stat-info">
                 <h3 id="pending-shippers">0</h3>
-                <p>Shipper Chờ Duyệt</p>
+                <p>Tài xế chờ duyệt</p>
+              </div>
+            </div>
+            <div class="stat-card" id="feedback-stat-card" style="cursor:pointer">
+              <div class="stat-icon" style="background: #ff7043">
+                <i class="fas fa-headset"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="open-feedback-count">0</h3>
+                <p>Yêu cầu hỗ trợ mở</p>
+                <span class="stat-subtext">Đã đóng: <span id="closed-feedback-count">0</span></span>
               </div>
             </div>
           </div>
@@ -178,10 +188,10 @@
             <table id="users-table">
               <thead>
                 <tr>
-                  <th>Avatar</th>
-                  <th>Username</th>
+                  <th>Ảnh đại diện</th>
+                  <th>Tên đăng nhập</th>
                   <th>Email</th>
-                  <th>Phone</th>
+                  <th>Số điện thoại</th>
                   <th>Loại</th>
                   <th>Xác Minh</th>
                   <th>Ngày Tạo</th>
@@ -194,10 +204,10 @@
           <div class="pagination" id="users-pagination"></div>
         </div>
 
-        <!-- Shippers Page -->
+        <!-- Trang duyệt tài xế -->
         <div id="shippers-page" class="page">
           <div class="page-header">
-            <h2>Duyệt Hồ Sơ Shipper</h2>
+            <h2>Duyệt Hồ Sơ Tài Xế</h2>
             <div class="filters">
               <select id="shipper-status-filter">
                 <option value="pending">Chờ duyệt</option>
@@ -249,10 +259,10 @@
             <table id="stores-table">
               <thead>
                 <tr>
-                  <th>Logo</th>
-                  <th>Tên Store</th>
+                  <th>Biểu trưng</th>
+                  <th>Tên Cửa Hàng</th>
                   <th>Mã</th>
-                  <th>Rating</th>
+                  <th>Đánh Giá</th>
                   <th>Trạng Thái</th>
                   <th>Xác Minh</th>
                   <th>Hành Động</th>
@@ -300,7 +310,7 @@
                 <tr>
                   <th>Mã ĐH</th>
                   <th>Khách Hàng</th>
-                  <th>Store</th>
+                  <th>Cửa Hàng</th>
                   <th>Tổng Tiền</th>
                   <th>Thanh Toán</th>
                   <th>Trạng Thái</th>
@@ -323,15 +333,21 @@
                 <option value="">Tất cả trạng thái</option>
                 <option value="Pending">Chờ xử lý</option>
                 <option value="In Progress">Đang xử lý</option>
+                <option value="WaitingRequester">Chờ phản hồi</option>
                 <option value="Resolved">Đã giải quyết</option>
                 <option value="Closed">Đã đóng</option>
               </select>
               <select id="feedback-type-filter">
                 <option value="">Tất cả loại</option>
-                <option value="Bug">Lỗi</option>
-                <option value="Feature Request">Yêu cầu tính năng</option>
-                <option value="Complaint">Khiếu nại</option>
-                <option value="Suggestion">Góp ý</option>
+                <option value="Order">Đơn hàng</option>
+                <option value="Payment">Thanh toán</option>
+                <option value="Account">Tài khoản</option>
+                <option value="Delivery">Giao hàng</option>
+                <option value="Store">Cửa hàng</option>
+                <option value="Driver">Tài xế</option>
+                <option value="Settlement">Đối soát</option>
+                <option value="Technical">Kỹ thuật</option>
+                <option value="Other">Khác</option>
               </select>
             </div>
           </div>
@@ -339,18 +355,18 @@
           <div class="pagination" id="feedback-pagination"></div>
         </div>
 
-        <!-- Vouchers Page -->
+        <!-- Trang mã giảm giá -->
         <div id="vouchers-page" class="page">
           <div class="page-header">
-            <h2>Quản Lý Voucher</h2>
+            <h2>Quản Lý Mã Giảm Giá</h2>
             <div class="filters">
               <input
                 type="text"
                 id="voucher-search"
-                placeholder="Tìm kiếm mã voucher..."
+                placeholder="Tìm kiếm mã giảm giá..."
               />
               <button class="btn btn-primary" onclick="openVoucherModal()">
-                <i class="fas fa-plus"></i> Tạo Voucher
+                <i class="fas fa-plus"></i> Tạo mã giảm giá
               </button>
             </div>
           </div>
@@ -358,7 +374,7 @@
             <table id="vouchers-table">
               <thead>
                 <tr>
-                  <th>Mã Voucher</th>
+                  <th>Mã giảm giá</th>
                   <th>Tiêu Đề</th>
                   <th>Loại</th>
                   <th>Giá Trị</th>
@@ -400,16 +416,16 @@
       </div>
     </div>
 
-    <!-- Voucher Modal -->
+    <!-- Modal mã giảm giá -->
     <div id="voucherModal" class="modal">
       <div class="modal-content" style="max-width: 600px">
         <span class="close">&times;</span>
-        <h2 id="voucher-modal-title">Tạo Voucher Mới</h2>
+        <h2 id="voucher-modal-title">Tạo mã giảm giá mới</h2>
         <form id="voucher-form">
           <input type="hidden" id="voucher-id" />
 
           <div class="form-group">
-            <label>Mã Voucher: <span style="color: red">*</span></label>
+            <label>Mã giảm giá: <span style="color: red">*</span></label>
             <input
               type="text"
               id="voucher-code"
@@ -432,7 +448,7 @@
             <textarea
               id="voucher-description"
               rows="3"
-              placeholder="Mô tả chi tiết voucher..."
+              placeholder="Mô tả chi tiết mã giảm giá..."
             ></textarea>
           </div>
 
@@ -501,12 +517,12 @@
           <div class="form-group">
             <label>
               <input type="checkbox" id="voucher-is-active" checked />
-              Kích Hoạt Voucher
+              Kích hoạt mã giảm giá
             </label>
           </div>
 
           <button type="submit" class="btn btn-primary btn-block">
-            Lưu Voucher
+            Lưu mã giảm giá
           </button>
         </form>
       </div>
@@ -515,7 +531,7 @@
     <div id="feedbackModal" class="modal">
       <div class="modal-content">
         <span class="close">&times;</span>
-        <h2>Phản Hồi Feedback</h2>
+        <h2>Phản Hồi Yêu Cầu</h2>
         <form id="feedback-response-form">
           <input type="hidden" id="feedback-id" />
           <div class="form-group">
@@ -523,6 +539,7 @@
             <select id="feedback-response-status" required>
               <option value="Pending">Chờ xử lý</option>
               <option value="In Progress">Đang xử lý</option>
+              <option value="WaitingRequester">Chờ phản hồi</option>
               <option value="Resolved">Đã giải quyết</option>
               <option value="Closed">Đã đóng</option>
             </select>
@@ -531,7 +548,7 @@
             <label>Độ ưu tiên:</label>
             <select id="feedback-priority">
               <option value="Low">Thấp</option>
-              <option value="Medium">Trung bình</option>
+              <option value="Normal">Bình thường</option>
               <option value="High">Cao</option>
               <option value="Urgent">Khẩn cấp</option>
             </select>
@@ -567,11 +584,11 @@
       </div>
     </div>
 
-    <!-- Shipper Application Detail Modal -->
+    <!-- Modal hồ sơ tài xế -->
     <div id="shipperDetailModal" class="modal">
       <div class="modal-content" style="max-width: 900px">
         <span class="close">&times;</span>
-        <h2>Chi Tiết Hồ Sơ Shipper</h2>
+        <h2>Chi Tiết Hồ Sơ Tài Xế</h2>
         <div id="shipper-detail-content"></div>
       </div>
     </div>

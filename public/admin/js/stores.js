@@ -41,29 +41,25 @@ function renderStoresTable(stores) {
 
       return `
             <tr>
-                <td><img src="${store.logoUrl}" alt="${
-        store.title
-      }" class="store-logo"></td>
+                <td><img src="${store.logoUrl}" alt="${store.title
+        }" class="store-logo"></td>
                 <td>${store.title}</td>
                 <td>${store.code}</td>
                 <td>⭐ ${store.rating.toFixed(1)} (${store.ratingCount})</td>
                 <td>
-                    ${
-                      store.isAvailable
-                        ? '<span class="badge badge-success">Hoạt động</span>'
-                        : '<span class="badge badge-danger">Tạm ngưng</span>'
-                    }
+                    ${store.isAvailable
+          ? '<span class="badge badge-success">Hoạt động</span>'
+          : '<span class="badge badge-danger">Tạm ngưng</span>'
+        }
                 </td>
                 <td>${verificationBadge}</td>
                 <td>
-                    ${
-                      store.verification === "Đang chờ duyệt"
-                        ? `<button class="btn btn-success btn-sm" onclick="openVerifyModal('${store._id}')">Duyệt</button>`
-                        : `<button class="btn btn-sm btn-primary" onclick="viewStore('${store._id}')">Xem</button>`
-                    }
-                    <button class="btn btn-danger btn-sm" onclick="deleteStore('${
-                      store._id
-                    }')">Xóa</button>
+                    ${store.verification === "Đang chờ duyệt"
+          ? `<button class="btn btn-success btn-sm" onclick="openVerifyModal('${store._id}')">Duyệt</button>`
+          : `<button class="btn btn-sm btn-primary" onclick="viewStore('${store._id}')">Xem</button>`
+        }
+                    <button class="btn btn-danger btn-sm" onclick="deleteStore('${store._id
+        }')">Xóa</button>
                 </td>
             </tr>
         `;
@@ -141,7 +137,7 @@ async function deleteStore(storeId) {
       showNotification("Đã xóa cửa hàng thành công!");
       loadStores(currentStoresPage);
     } else {
-      showNotification("Xóa store thất bại!", "error");
+      showNotification("Xóa cửa hàng thất bại!", "error");
     }
   } catch (error) {
     console.error("Error deleting store:", error);

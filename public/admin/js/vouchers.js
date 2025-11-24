@@ -39,9 +39,8 @@ function renderVouchersTable(vouchers) {
         ? new Date(voucher.validUntil).toLocaleDateString("vi-VN")
         : "Không giới hạn";
 
-      const usageDisplay = `${voucher.usedCount || 0}/${
-        voucher.usageLimit || "∞"
-      }`;
+      const usageDisplay = `${voucher.usedCount || 0}/${voucher.usageLimit || "∞"
+        }`;
 
       const statusBadge = voucher.isActive
         ? '<span class="badge badge-success">Hoạt động</span>'
@@ -50,7 +49,7 @@ function renderVouchersTable(vouchers) {
       return `
         <tr>
           <td><strong>${voucher.code}</strong></td>
-          <td>${voucher.title || "N/A"}</td>
+          <td>${voucher.title || "Chưa có"}</td>
           <td><span class="badge badge-info">${typeLabel}</span></td>
           <td>${valueDisplay}</td>
           <td>${validFrom}</td>
@@ -58,14 +57,12 @@ function renderVouchersTable(vouchers) {
           <td>${usageDisplay}</td>
           <td>${statusBadge}</td>
           <td>
-            <button class="btn btn-primary btn-sm" onclick="editVoucher('${
-              voucher._id
-            }')">
+            <button class="btn btn-primary btn-sm" onclick="editVoucher('${voucher._id
+        }')">
               <i class="fas fa-edit"></i> Sửa
             </button>
-            <button class="btn btn-danger btn-sm" onclick="deleteVoucher('${
-              voucher._id
-            }')">
+            <button class="btn btn-danger btn-sm" onclick="deleteVoucher('${voucher._id
+        }')">
               <i class="fas fa-trash"></i> Xóa
             </button>
           </td>
@@ -112,10 +109,10 @@ function openVoucherModal(voucherId = null) {
   form.reset();
 
   if (voucherId) {
-    title.textContent = "Chỉnh Sửa Voucher";
+    title.textContent = "Chỉnh sửa mã giảm giá";
     loadVoucherData(voucherId);
   } else {
-    title.textContent = "Tạo Voucher Mới";
+    title.textContent = "Tạo mã giảm giá mới";
   }
 
   modal.style.display = "block";
@@ -167,7 +164,7 @@ async function editVoucher(voucherId) {
 }
 
 async function deleteVoucher(voucherId) {
-  if (!confirm("Bạn có chắc muốn xóa voucher này?")) return;
+  if (!confirm("Bạn có chắc muốn xóa mã giảm giá này?")) return;
 
   try {
     const data = await apiCall(`/api/admin/vouchers/${voucherId}`, {
@@ -175,14 +172,14 @@ async function deleteVoucher(voucherId) {
     });
 
     if (data && data.status) {
-      showNotification("Đã xóa voucher thành công!");
+      showNotification("Đã xóa mã giảm giá thành công!");
       loadVouchers(currentVouchersPage);
     } else {
-      showNotification(data.message || "Xóa voucher thất bại!", "error");
+      showNotification(data.message || "Xóa mã giảm giá thất bại!", "error");
     }
   } catch (error) {
     console.error("Error deleting voucher:", error);
-    showNotification("Có lỗi xảy ra khi xóa voucher!", "error");
+    showNotification("Có lỗi xảy ra khi xóa mã giảm giá!", "error");
   }
 }
 
@@ -234,17 +231,17 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data && data.status) {
           showNotification(
             voucherId
-              ? "Cập nhật voucher thành công!"
-              : "Tạo voucher thành công!"
+              ? "Cập nhật mã giảm giá thành công!"
+              : "Tạo mã giảm giá thành công!"
           );
           document.getElementById("voucherModal").style.display = "none";
           loadVouchers(currentVouchersPage);
         } else {
-          showNotification(data.message || "Lưu voucher thất bại!", "error");
+          showNotification(data.message || "Lưu mã giảm giá thất bại!", "error");
         }
       } catch (error) {
         console.error("Error saving voucher:", error);
-        showNotification("Có lỗi xảy ra khi lưu voucher!", "error");
+        showNotification("Có lỗi xảy ra khi lưu mã giảm giá!", "error");
       }
     });
   }

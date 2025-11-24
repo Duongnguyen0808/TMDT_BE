@@ -1,14 +1,28 @@
 const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
+const Store = require("../models/Store");
 const User = require("../models/User");
 
 const ensureVendorUser = async (vendorId) => {
     const vendor = await User.findById(vendorId);
-    if (!vendor || vendor.userType !== "Vendor") {
+    if (!vendor) {
         const err = new Error("Vendor không tồn tại");
         err.status = 404;
         throw err;
     }
+
+    if (vendor.userType !== "Vendor") {
+        const ownsStore = await Store.exists({ owner: vendorId });
+        if (ownsStore) {
+            vendor.userType = "Vendor";
+            await vendor.save();
+        } else {
+            const err = new Error("Tài khoản này không phải cửa hàng");
+            err.status = 403;
+            throw err;
+        }
+    }
+
     return vendor;
 };
 
@@ -17,8 +31,19 @@ module.exports = {
     getOrCreateConversation: async (req, res) => {
         try {
             const userId = req.user.id;
-            const { vendorId } = req.body;
-            if (!vendorId) return res.status(400).json({ status: false, message: "Thiếu vendorId" });
+            let { vendorId, storeId } = req.body;
+
+            if (!vendorId && storeId) {
+                const store = await Store.findById(storeId).select("owner title");
+                if (!store) {
+                    return res.status(404).json({ status: false, message: "Không tìm thấy cửa hàng" });
+                }
+                vendorId = store.owner;
+            }
+
+            if (!vendorId) {
+                return res.status(400).json({ status: false, message: "Thiếu vendorId" });
+            }
 
             await ensureVendorUser(vendorId);
 

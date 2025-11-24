@@ -22,10 +22,35 @@ router.get(
   verifyTokenAndAuthorization,
   orderController.getStoreOrders
 );
+router.post(
+  "/:id/ready-for-pickup",
+  verifyTokenAndAuthorization,
+  orderController.markReadyForPickup
+);
+router.post(
+  "/:id/pickup-code/regenerate",
+  verifyTokenAndAuthorization,
+  orderController.regeneratePickupCode
+);
+router.post(
+  "/:id/cancel",
+  verifyTokenAndAuthorization,
+  orderController.cancelOrder
+);
 router.put(
   "/:id",
   verifyTokenAndAuthorization,
   orderController.updateOrderStatus
+);
+router.post(
+  "/:id/shipper-checkin",
+  verifyTokenAndAuthorization,
+  orderController.driverPickupCheckin
+);
+router.post(
+  "/:id/shipper-confirm-pickup",
+  verifyTokenAndAuthorization,
+  orderController.driverConfirmPickup
 );
 
 // Logistics progression (Admin only)

@@ -36,13 +36,20 @@ const OrderSchema = new mongoose.Schema(
       enum: ["Pending", "Completed", "Failed", "Refunded"],
       default: "Pending",
     },
+    paymentGatewayTxnId: { type: String, default: "" },
+    paymentGatewayTxnDate: { type: String, default: "" },
+    paymentGatewayBankCode: { type: String, default: "" },
+    paymentGatewayTrace: { type: String, default: "" },
+    paymentGatewayPayload: { type: mongoose.Schema.Types.Mixed },
     orderStatus: {
       type: String,
       enum: [
         "Pending",
         "Preparing",
+        "ReadyForPickup",
         // New intermediate: vendor finished prep, system finding driver
         "WaitingShipper",
+        "PickedUp",
         "Delivering",
         "Delivered",
         "Cancelled"
@@ -56,12 +63,28 @@ const OrderSchema = new mongoose.Schema(
     },
     storeCoords: [Number],
     recipientCoords: [Number],
+    deliveryDistanceKm: { type: Number, default: 0 },
     driverId: { type: String, default: "" },
     // Automated driver proposal workflow
     proposedDriverId: { type: String, default: "" }, // user id of proposed driver
     proposalExpiresAt: { type: Date }, // time limit for current proposal
     proposalAttempts: { type: Number, default: 0 }, // how many drivers tried
     proposalHistory: [{ type: String }], // list of driver user ids already proposed
+    // Shop ↔ shipper pickup handover details
+    shopReadyBy: { type: String, default: "" },
+    pickupCode: { type: String, default: "" },
+    pickupCodeExpiresAt: { type: Date },
+    pickupReadyAt: { type: Date },
+    pickupAssignedAt: { type: Date },
+    pickupCheckinAt: { type: Date },
+    pickupCheckinLocation: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+    },
+    pickupConfirmedAt: { type: Date },
+    pickupNotes: { type: String, default: "" },
+    handoverPhoto: { type: String, default: "" },
+    shipperPickupBy: { type: String, default: "" },
     // Khi tài xế nhận đơn
     driverAssignedAt: { type: Date },
     // Vị trí hiện tại của tài xế cho đơn này (cập nhật định kỳ)
@@ -94,6 +117,8 @@ const OrderSchema = new mongoose.Schema(
     discountAmount: { type: Number },
     note: { type: String },
     cancellationReason: { type: String, default: "" },
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    cancelledAt: { type: Date },
     // Return/Refund
     returnStatus: {
       type: String,
@@ -113,6 +138,14 @@ const OrderSchema = new mongoose.Schema(
     refundAmount: { type: Number, default: 0 },
     refundMethod: { type: String, default: "" },
     refundAt: { type: Date },
+    refundReference: { type: String, default: "" },
+    refundResponse: { type: mongoose.Schema.Types.Mixed },
+    driverCommissionAmount: { type: Number, default: 0 },
+    driverCommissionChargedAt: { type: Date },
+    driverPayoutAmount: { type: Number, default: 0 },
+    driverPayoutAt: { type: Date },
+    driverPayoutMethod: { type: String, default: "" },
+    driverPayoutReference: { type: String, default: "" },
   },
   { timestamps: true }
 );
@@ -123,5 +156,6 @@ OrderSchema.index({ storeId: 1, orderStatus: 1 });
 OrderSchema.index({ paymentStatus: 1 });
 OrderSchema.index({ orderStatus: 1 });
 OrderSchema.index({ createdAt: -1 });
+OrderSchema.index({ pickupReadyAt: -1 });
 
 module.exports = mongoose.model("Order", OrderSchema);

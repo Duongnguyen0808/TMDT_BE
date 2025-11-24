@@ -30,6 +30,8 @@ const ShipperRoute = require("./routes/shipper");
 const FcmRoute = require("./routes/fcm");
 const HubRoute = require("./routes/hub");
 const ShipmentRoute = require("./routes/shipment");
+const VendorWalletRoute = require("./routes/vendorWallet");
+const ServiceTicketRoute = require("./routes/serviceTicket");
 // const PromotionRoute = require("./routes/promotion");
 // Test FCM route (added for debugging) after dotenv loaded
 const { sendPushNotification, canUseAdmin, getFcmEnvInfo } = require('./utils/notification_service');
@@ -133,6 +135,8 @@ app.use("/api/shippers", ShipperRoute);
 app.use("/api/fcm", FcmRoute);
 app.use("/api/hubs", HubRoute);
 app.use("/api/shipments", ShipmentRoute);
+app.use("/api/vendor-wallet", VendorWalletRoute);
+app.use("/api/service-center", ServiceTicketRoute);
 // app.use("/api/promotions", PromotionRoute);
 
 // Simple FCM test endpoint

@@ -45,33 +45,28 @@ function renderUsersTable(users) {
 
       return `
         <tr>
-            <td><img src="${user.profile}" alt="${
-        user.username
-      }" class="user-avatar"></td>
+            <td><img src="${user.profile}" alt="${user.username
+        }" class="user-avatar"></td>
             <td>${user.username}</td>
             <td>${user.email}</td>
-            <td>${user.phone || "N/A"}</td>
+            <td>${user.phone || "Chưa có"}</td>
             <td><span class="badge ${userTypeBadge}">${userTypeLabel}</span></td>
             <td>
-                ${
-                  user.verification
-                    ? '<span class="badge badge-success">✓ Email</span>'
-                    : '<span class="badge badge-warning">✗ Email</span>'
-                }
-                ${
-                  user.phoneVerification
-                    ? '<span class="badge badge-success">✓ Phone</span>'
-                    : ""
-                }
+                ${user.verification
+          ? '<span class="badge badge-success">✓ Email</span>'
+          : '<span class="badge badge-warning">✗ Email</span>'
+        }
+                ${user.phoneVerification
+          ? '<span class="badge badge-success">✓ SĐT</span>'
+          : ""
+        }
             </td>
             <td>${formatDate(user.createdAt)}</td>
             <td>
-                <button class="btn btn-primary btn-sm" onclick="viewUser('${
-                  user._id
-                }')">Xem</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteUser('${
-                  user._id
-                }')">Xóa</button>
+                <button class="btn btn-primary btn-sm" onclick="viewUser('${user._id
+        }')">Xem</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteUser('${user._id
+        }')">Xóa</button>
             </td>
         </tr>
       `;
@@ -144,13 +139,12 @@ function displayUserDetails(userData) {
     <div class="detail-section">
       <div style="text-align: center; margin-bottom: 25px;">
         <img src="${user.profile}" alt="${user.username}" 
-             style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; border: 4px solid ${
-               user.userType === "Admin"
-                 ? "#dc3545"
-                 : user.userType === "Vendor"
-                 ? "#0891b2"
-                 : "#6c757d"
-             }; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+             style="width: 140px; height: 140px; border-radius: 50%; object-fit: cover; border: 4px solid ${user.userType === "Admin"
+      ? "#dc3545"
+      : user.userType === "Vendor"
+        ? "#0891b2"
+        : "#6c757d"
+    }; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
         <h3 style="margin-top: 15px; color: #333;">${user.username}</h3>
         <span class="badge ${userTypeBadge}" style="font-size: 14px; padding: 6px 16px;">${userTypeLabel}</span>
       </div>
@@ -166,19 +160,17 @@ function displayUserDetails(userData) {
         </div>
         <div class="detail-item">
           <strong>✉️ Xác minh Email</strong>
-          <span>${
-            user.verification
-              ? '<span class="badge badge-success">✓ Đã xác minh</span>'
-              : '<span class="badge badge-warning">✗ Chưa xác minh</span>'
-          }</span>
+          <span>${user.verification
+      ? '<span class="badge badge-success">✓ Đã xác minh</span>'
+      : '<span class="badge badge-warning">✗ Chưa xác minh</span>'
+    }</span>
         </div>
         <div class="detail-item">
           <strong>📞 Xác minh SĐT</strong>
-          <span>${
-            user.phoneVerification
-              ? '<span class="badge badge-success">✓ Đã xác minh</span>'
-              : '<span class="badge badge-warning">✗ Chưa xác minh</span>'
-          }</span>
+          <span>${user.phoneVerification
+      ? '<span class="badge badge-success">✓ Đã xác minh</span>'
+      : '<span class="badge badge-warning">✗ Chưa xác minh</span>'
+    }</span>
         </div>
         <div class="detail-item">
           <strong>📍 Địa chỉ</strong>
@@ -199,27 +191,24 @@ function displayUserDetails(userData) {
         <h3 style="color: #1e3c72; border-bottom: 2px solid #1e3c72; padding-bottom: 12px; margin-bottom: 20px; font-size: 18px;">📊 Thống Kê Đơn Hàng</h3>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
-            <div style="font-size: 32px; font-weight: bold;">${
-              orderStats.totalOrders
-            }</div>
+            <div style="font-size: 32px; font-weight: bold;">${orderStats.totalOrders
+      }</div>
             <div style="margin-top: 8px; opacity: 0.9;">Tổng đơn hàng</div>
           </div>
           <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 20px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);">
-            <div style="font-size: 32px; font-weight: bold;">${
-              orderStats.completedOrders
-            }</div>
+            <div style="font-size: 32px; font-weight: bold;">${orderStats.completedOrders
+      }</div>
             <div style="margin-top: 8px; opacity: 0.9;">Đã giao</div>
           </div>
           <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 20px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3);">
-            <div style="font-size: 32px; font-weight: bold;">${
-              orderStats.cancelledOrders
-            }</div>
+            <div style="font-size: 32px; font-weight: bold;">${orderStats.cancelledOrders
+      }</div>
             <div style="margin-top: 8px; opacity: 0.9;">Đã hủy</div>
           </div>
           <div style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); padding: 20px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(67, 233, 123, 0.3);">
             <div style="font-size: 22px; font-weight: bold;">${formatCurrency(
-              orderStats.totalSpent
-            )}</div>
+        orderStats.totalSpent
+      )}</div>
             <div style="margin-top: 8px; opacity: 0.9;">Tổng chi tiêu</div>
           </div>
         </div>
@@ -243,19 +232,17 @@ function displayUserDetails(userData) {
           </div>
           <div class="detail-item">
             <strong>⭐ Đánh giá</strong>
-            <span style="color: #ffc107; font-weight: bold;">${
-              storeInfo.rating || 0
-            } / 5</span>
+            <span style="color: #ffc107; font-weight: bold;">${storeInfo.rating || 0
+      } / 5</span>
           </div>
           <div class="detail-item">
             <strong>✅ Xác minh</strong>
-            <span class="badge ${
-              storeInfo.verification === "Đã xác minh"
-                ? "badge-success"
-                : storeInfo.verification === "Bị từ chối"
-                ? "badge-danger"
-                : "badge-warning"
-            }">
+            <span class="badge ${storeInfo.verification === "Đã xác minh"
+        ? "badge-success"
+        : storeInfo.verification === "Bị từ chối"
+          ? "badge-danger"
+          : "badge-warning"
+      }">
               ${storeInfo.verification}
             </span>
           </div>
@@ -291,7 +278,7 @@ async function deleteUser(userId) {
       showNotification("Đã xóa người dùng thành công!");
       loadUsers(currentUsersPage);
     } else {
-      showNotification("Xóa user thất bại!", "error");
+      showNotification("Xóa người dùng thất bại!", "error");
     }
   } catch (error) {
     console.error("Error deleting user:", error);

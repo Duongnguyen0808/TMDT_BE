@@ -156,6 +156,13 @@ body {
   margin-top: 5px;
 }
 
+.stat-subtext {
+  display: inline-block;
+  margin-top: 6px;
+  color: #888;
+  font-size: 13px;
+}
+
 /* Charts Section */
 .charts-section {
   display: grid;
@@ -406,6 +413,48 @@ tbody td {
 .feedback-user {
   font-size: 14px;
   color: #666;
+}
+
+.ticket-last-message {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f9fafc;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #555;
+  border: 1px solid #eef1f6;
+}
+
+.ticket-last-message strong {
+  margin-right: 6px;
+  color: #1e3c72;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  color: #666;
+  text-align: center;
+}
+
+.empty-state i {
+  font-size: 36px;
+  color: #1e3c72;
+}
+
+.empty-state.error {
+  color: #f44336;
+}
+
+.empty-state.error i {
+  color: #f44336;
 }
 
 /* Pagination */
