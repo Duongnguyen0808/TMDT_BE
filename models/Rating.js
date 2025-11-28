@@ -10,7 +10,7 @@ const RatingSchema = new mongoose.Schema(
     ratingType: {
       type: String,
       required: true,
-      enum: ["Store", "Driver", "Appliances"],
+      enum: ["Store", "Driver", "Appliances", "Customer"],
     },
     product: { type: String, required: true },
     rating: { type: Number, min: 1, max: 5, required: true },

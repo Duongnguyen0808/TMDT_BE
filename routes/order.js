@@ -5,11 +5,21 @@ const { verifyTokenAndAuthorization } = require("../middleware/verifyToken");
 
 router.post("/", verifyTokenAndAuthorization, orderController.placeOrder);
 router.get(
+  "/:id/logistics",
+  verifyTokenAndAuthorization,
+  orderController.getLogisticsTimeline
+);
+router.get(
   "/:id",
   verifyTokenAndAuthorization,
   orderController.getOrderDetails
 );
 router.get("/", verifyTokenAndAuthorization, orderController.getUserOrders);
+router.get(
+  "/store/:id/pending-delivery",
+  verifyTokenAndAuthorization,
+  orderController.listPendingDeliveryProofs
+);
 // Advanced (pagination + multi-status) first to avoid shadowing
 router.get(
   "/store/:id",
@@ -51,6 +61,31 @@ router.post(
   "/:id/shipper-confirm-pickup",
   verifyTokenAndAuthorization,
   orderController.driverConfirmPickup
+);
+router.post(
+  "/:id/delivery-proof",
+  verifyTokenAndAuthorization,
+  orderController.submitDeliveryProof
+);
+router.post(
+  "/:id/shop-delivery-confirm",
+  verifyTokenAndAuthorization,
+  orderController.shopConfirmDelivery
+);
+router.post(
+  "/:id/delivery-dispute",
+  verifyTokenAndAuthorization,
+  orderController.createDeliveryDispute
+);
+router.post(
+  "/:id/delivery-dispute/review",
+  verifyTokenAndAuthorization,
+  orderController.reviewDeliveryDispute
+);
+router.post(
+  "/:id/delivery-escalate",
+  verifyTokenAndAuthorization,
+  orderController.escalateDeliveryIssue
 );
 
 // Logistics progression (Admin only)

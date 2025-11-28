@@ -5,7 +5,24 @@ const Order = require("../models/Order");
 const Store = require("../models/Store");
 const Hub = require("../models/Hub");
 const mongoose = require("mongoose");
-const { settleDriverDeliveryPayout } = require("../utils/driverPayout");
+const orderController = require("./orderController");
+const resolveVendorUserForStore = async (storeId) => {
+    if (!storeId) return { user: null, title: "" };
+    try {
+        const store = await Store.findById(storeId).select("owner title");
+        if (!store) return { user: null, title: "" };
+        if (!store.owner) return { user: null, title: store.title || "" };
+        const vendorUser = await User.findById(store.owner).select("fcm username");
+        return { user: vendorUser, title: store.title || "" };
+    } catch (_) {
+        return { user: null, title: "" };
+    }
+};
+const {
+    sendDriverAssignedNotification,
+    sendVendorDriverClaimedNotification,
+    sendDriverUnassignedNotification,
+} = require("../utils/notification_service");
 
 module.exports = {
     myProfile: async (req, res) => {
@@ -153,7 +170,7 @@ module.exports = {
             const { orderId, driverId } = req.body;
             if (!orderId || !driverId) return res.status(400).json({ status: false, message: "Thiếu orderId hoặc driverId" });
 
-            const driver = await Driver.findOne({ _id: driverId, vendor: vendorId }).populate("user");
+            const driver = await Driver.findOne({ _id: driverId, vendor: vendorId }).populate({ path: "user", select: "fcm username" });
             if (!driver) return res.status(404).json({ status: false, message: "Tài xế không thuộc quyền quản lý" });
 
             const order = await Order.findById(orderId).populate("storeId");
@@ -171,6 +188,16 @@ module.exports = {
                 driver.status = "busy";
                 await driver.save();
             }
+
+            try {
+                if (driver.user && driver.user.fcm && driver.user.fcm !== "none") {
+                    await sendDriverAssignedNotification(
+                        driver.user.fcm,
+                        order._id,
+                        order.storeId?.title || ""
+                    );
+                }
+            } catch (_) { }
 
             try {
                 const io = req.app.get("io");
@@ -191,7 +218,7 @@ module.exports = {
         try {
             const driverUserId = req.user.id;
             const orders = await Order.find({ driverId: String(driverUserId) })
-                .select("userId deliveryAddress orderItems deliveryFee orderTotal grandTotal orderStatus storeId storeCoords recipientCoords createdAt updatedAt logisticStatus pickupCode pickupCodeExpiresAt pickupReadyAt pickupAssignedAt pickupCheckinAt pickupCheckinLocation pickupConfirmedAt pickupNotes handoverPhoto shopReadyBy shipperPickupBy")
+                .select("userId deliveryAddress orderItems deliveryFee orderTotal grandTotal orderStatus storeId storeCoords recipientCoords createdAt updatedAt logisticStatus pickupCode pickupCodeExpiresAt pickupReadyAt pickupAssignedAt pickupCheckinAt pickupCheckinLocation pickupConfirmedAt pickupNotes handoverPhoto shopReadyBy shipperPickupBy deliveryProofPhoto deliveryProofNote deliveryProofRecipient deliveryProofAt deliveryProofBy deliveryProofLocation shopDeliveryConfirmStatus shopDeliveryConfirmedAt shopDeliveryConfirmedBy shopDeliveryConfirmNote shopDeliveryRejectReason shopDeliveryRejectedAt")
                 .populate({ path: "userId", select: "phone profile" })
                 .populate({ path: "storeId", select: "title coords logoUrl imageUrl" })
                 .populate({ path: "orderItems.appliancesId", select: "title imageUrl price" })
@@ -226,14 +253,24 @@ module.exports = {
             const driverUserId = req.user.id;
             const { id } = req.params;
 
+            let driverAccount = null;
             try {
-                const u = await User.findById(driverUserId).select("userType");
-                if (!u || u.userType !== "Driver") {
+                driverAccount = await User.findById(driverUserId).select("userType username");
+                if (!driverAccount || driverAccount.userType !== "Driver") {
                     return res.status(403).json({ status: false, message: "Tài khoản không phải tài xế" });
                 }
             } catch (_) { }
 
-            const activeCount = await Order.countDocuments({ driverId: String(driverUserId), orderStatus: { $in: ["PickedUp", "Delivering"] } });
+            const activeCount = await Order.countDocuments({
+                driverId: String(driverUserId),
+                orderStatus: { $in: ["PickedUp", "Delivering"] },
+                // Only block drivers on orders that still need proof so they can keep working while shop verifies.
+                $or: [
+                    { deliveryProofPhoto: { $exists: false } },
+                    { deliveryProofPhoto: null },
+                    { deliveryProofPhoto: "" }
+                ]
+            });
             if (activeCount >= 5) {
                 return res.status(400).json({ status: false, message: "Bạn đã đạt giới hạn 5 đơn đang giao" });
             }
@@ -289,6 +326,17 @@ module.exports = {
                     if (io) {
                         io.emit("order:assigned", { orderId: String(order._id), driverId: String(driverUserId) });
                         io.emit("driver:status", { driverId: String(driverUserId), status: "busy" });
+                    }
+                } catch (_) { }
+
+                try {
+                    const { user: vendorUser } = await resolveVendorUserForStore(order.storeId);
+                    if (vendorUser && vendorUser.fcm && vendorUser.fcm !== "none") {
+                        await sendVendorDriverClaimedNotification(
+                            vendorUser.fcm,
+                            order._id,
+                            driverAccount?.username || "Tài xế"
+                        );
                     }
                 } catch (_) { }
 
@@ -362,37 +410,16 @@ module.exports = {
             if (status === "Delivering" && !["PickedUp", "Delivering"].includes(order.orderStatus)) {
                 return res.status(400).json({ status: false, message: "Bạn cần xác nhận lấy hàng trước" });
             }
-            if (status === "Delivered" && !["Delivering", "PickedUp"].includes(order.orderStatus)) {
-                return res.status(400).json({ status: false, message: "Đơn chưa sẵn sàng để hoàn tất" });
+
+            if (status === "Delivered") {
+                req.params.id = id;
+                req.body.orderStatus = "Delivered";
+                return orderController.submitDeliveryProof(req, res);
             }
 
             order.orderStatus = status;
             if (status === "Delivering") order.logisticStatus = "Delivering";
-            if (status === "Delivered") order.logisticStatus = "Delivered";
             await order.save();
-
-            if (status === "Delivered") {
-                try {
-                    await settleDriverDeliveryPayout(order);
-                } catch (payoutError) {
-                    console.warn("[driverUpdateOrderStatus] payout failed", payoutError?.message || payoutError);
-                }
-            }
-
-            if (status === "Delivered" && order.driverId) {
-                const drv = await Driver.findOne({ user: order.driverId });
-                if (drv) {
-                    const remaining = await Order.countDocuments({
-                        driverId: String(order.driverId),
-                        orderStatus: { $in: ["Delivering"] },
-                        _id: { $ne: order._id },
-                    });
-                    if (remaining === 0) {
-                        drv.status = "available";
-                        await drv.save();
-                    }
-                }
-            }
 
             return res.status(200).json({ status: true, message: "Cập nhật trạng thái thành công" });
         } catch (error) {
@@ -425,6 +452,7 @@ module.exports = {
             const order = await Order.findById(orderId).populate("storeId");
             if (!order) return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
             if (!order.driverId) return res.status(200).json({ status: true, message: "Đơn không có tài xế" });
+            const removedDriverId = String(order.driverId);
 
             const store = order.storeId;
             if (!store || String(store.owner) !== String(vendorId)) {
@@ -445,6 +473,19 @@ module.exports = {
                 if (io) {
                     io.emit("order:unassigned", { orderId: String(order._id) });
                     if (drv) io.emit("driver:status", { driverId: String(drv.user), status: drv.status });
+                }
+            } catch (_) { }
+
+            try {
+                if (removedDriverId) {
+                    const driverUser = await User.findById(removedDriverId).select("fcm username");
+                    if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+                        await sendDriverUnassignedNotification(
+                            driverUser.fcm,
+                            order._id,
+                            order.storeId?.title || ""
+                        );
+                    }
                 }
             } catch (_) { }
 

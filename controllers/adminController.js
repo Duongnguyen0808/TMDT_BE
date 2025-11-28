@@ -515,7 +515,123 @@ module.exports = {
       // Lấy thông tin cửa hàng nếu là Vendor
       let storeInfo = null;
       if (user.userType === "Vendor") {
-        storeInfo = await Store.findOne({ owner: user._id });
+        storeInfo = await Store.findOne({ owner: user._id }).lean();
+        if (storeInfo) {
+          const [metrics] = await Order.aggregate([
+            { $match: { storeId: storeInfo._id } },
+            {
+              $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                completedOrders: {
+                  $sum: {
+                    $cond: [{ $eq: ["$orderStatus", "Delivered"] }, 1, 0],
+                  },
+                },
+                cancelledOrders: {
+                  $sum: {
+                    $cond: [{ $eq: ["$orderStatus", "Cancelled"] }, 1, 0],
+                  },
+                },
+                activeOrders: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $in: [
+                          "$orderStatus",
+                          [
+                            "Pending",
+                            "Preparing",
+                            "ReadyForPickup",
+                            "WaitingShipper",
+                            "PickedUp",
+                            "Delivering",
+                          ],
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                totalRevenue: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$paymentStatus", "Completed"] },
+                      "$grandTotal",
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ]);
+          storeInfo.metrics = {
+            totalOrders: metrics ? metrics.totalOrders || 0 : 0,
+            completedOrders: metrics ? metrics.completedOrders || 0 : 0,
+            cancelledOrders: metrics ? metrics.cancelledOrders || 0 : 0,
+            activeOrders: metrics ? metrics.activeOrders || 0 : 0,
+            totalRevenue: metrics ? metrics.totalRevenue || 0 : 0,
+          };
+        }
+      }
+
+      let driverStats = null;
+      let shipperProfile = null;
+      if (user.userType === "Driver") {
+        const driverId = user._id.toString();
+        shipperProfile = await ShipperApplication.findOne({
+          user: user._id,
+        }).lean();
+        const statusBuckets = await Order.aggregate([
+          { $match: { driverId } },
+          {
+            $group: {
+              _id: "$orderStatus",
+              count: { $sum: 1 },
+              totalCommission: {
+                $sum: { $ifNull: ["$driverCommissionAmount", 0] },
+              },
+              totalPayout: {
+                $sum: { $ifNull: ["$driverPayoutAmount", 0] },
+              },
+            },
+          },
+        ]);
+
+        const baseStats = {
+          totalOrders: 0,
+          completedOrders: 0,
+          activeOrders: 0,
+          cancelledOrders: 0,
+          totalCommission: 0,
+          totalPayout: 0,
+          rating: user.rating || 0,
+          ratingCount: user.ratingCount || 0,
+        };
+        const activeStatuses = [
+          "Pending",
+          "Preparing",
+          "ReadyForPickup",
+          "WaitingShipper",
+          "PickedUp",
+          "Delivering",
+        ];
+
+        statusBuckets.forEach((bucket) => {
+          baseStats.totalOrders += bucket.count;
+          baseStats.totalCommission += bucket.totalCommission || 0;
+          baseStats.totalPayout += bucket.totalPayout || 0;
+          if (bucket._id === "Delivered") {
+            baseStats.completedOrders += bucket.count;
+          } else if (bucket._id === "Cancelled") {
+            baseStats.cancelledOrders += bucket.count;
+          } else if (activeStatuses.includes(bucket._id)) {
+            baseStats.activeOrders += bucket.count;
+          }
+        });
+
+        driverStats = baseStats;
       }
 
       res.status(200).json({
@@ -524,6 +640,8 @@ module.exports = {
           user,
           orderStats,
           storeInfo,
+          driverStats,
+          shipperProfile,
         },
       });
     } catch (error) {

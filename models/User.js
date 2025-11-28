@@ -31,6 +31,8 @@ const UserSchema = new mongoose.Schema(
       default:
         "https://ui-avatars.com/api/?name=User&background=6366f1&color=fff&size=200",
     },
+    rating: { type: Number, default: 0 },
+    ratingCount: { type: Number, default: 0 },
     // Password reset support
     resetPasswordOTP: { type: String, required: false },
     resetPasswordExpires: { type: Date, required: false },

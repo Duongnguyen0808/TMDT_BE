@@ -511,6 +511,80 @@ const sendTopicNotification = async (topic, title, body, data = {}) => {
  * Helper: validate token format quickly (can extend for regex)
  */
 const isValidFcmToken = (token) => !!token && token !== "none" && token.length > 20;
+const orderCode = (orderId) => `#${String(orderId).slice(-6)}`;
+
+const sendVendorNewOrderNotification = async (fcmToken, orderId, storeTitle = "", amount = 0) => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const total = Number(amount) || 0;
+  const body = `Khách vừa đặt ${orderCode(orderId)} cho ${storeTitle || "cửa hàng của bạn"} (${total.toLocaleString("vi-VN")}đ).`;
+  return sendPushNotification(fcmToken, "🛎️ Có đơn mới", body, {
+    type: "vendor_order_new",
+    orderId: String(orderId),
+    storeTitle,
+    amount: String(total),
+  });
+};
+
+const sendVendorDriverClaimedNotification = async (fcmToken, orderId, driverName = "") => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const body = `${driverName || "Một tài xế"} đã nhận đơn ${orderCode(orderId)} và đang di chuyển tới shop.`;
+  return sendPushNotification(fcmToken, "🚚 Shipper đã nhận đơn", body, {
+    type: "vendor_driver_claimed",
+    orderId: String(orderId),
+    driverName,
+  });
+};
+
+const sendDriverAssignedNotification = async (fcmToken, orderId, storeTitle = "") => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const body = `Bạn vừa được gán ${orderCode(orderId)} từ ${storeTitle || "một cửa hàng"}. Kiểm tra mục Đơn của tôi.`;
+  return sendPushNotification(fcmToken, "📦 Có đơn mới", body, {
+    type: "driver_assigned",
+    orderId: String(orderId),
+    storeTitle,
+  });
+};
+
+const sendDriverPickupReadyNotification = async (fcmToken, orderId, storeTitle = "", pickupCode = "", expiresAt = null) => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const body = `${storeTitle || "Shop"} báo đơn ${orderCode(orderId)} đã sẵn sàng${pickupCode ? `, mã: ${pickupCode}` : ""}.`;
+  return sendPushNotification(fcmToken, "🏁 Hàng đã sẵn sàng", body, {
+    type: "driver_pickup_ready",
+    orderId: String(orderId),
+    pickupCode: pickupCode || "",
+    expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+  });
+};
+
+const sendDriverOrderCancelledNotification = async (fcmToken, orderId, reason = "") => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const body = `Đơn ${orderCode(orderId)} đã bị hủy${reason ? `: ${reason}` : ""}.`;
+  return sendPushNotification(fcmToken, "❌ Đơn đã hủy", body, {
+    type: "driver_order_cancelled",
+    orderId: String(orderId),
+    reason,
+  });
+};
+
+const sendDriverDisputeResolutionNotification = async (fcmToken, orderId, resolutionNote = "") => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const body = `Khiếu nại đơn ${orderCode(orderId)} đã có kết quả: ${resolutionNote || "Shop đã cập nhật"}.`;
+  return sendPushNotification(fcmToken, "✅ Cập nhật khiếu nại", body, {
+    type: "driver_dispute_resolution",
+    orderId: String(orderId),
+    note: resolutionNote,
+  });
+};
+
+const sendDriverUnassignedNotification = async (fcmToken, orderId, storeTitle = "") => {
+  if (!isValidFcmToken(fcmToken)) return { success: false, message: "Invalid token" };
+  const body = `Bạn không còn phụ trách ${orderCode(orderId)} từ ${storeTitle || "shop này"}.`;
+  return sendPushNotification(fcmToken, "ℹ️ Đơn đã chuyển", body, {
+    type: "driver_unassigned",
+    orderId: String(orderId),
+    storeTitle,
+  });
+};
 
 module.exports = {
   sendPushNotification,
@@ -519,6 +593,13 @@ module.exports = {
   sendPaymentSuccessNotification,
   sendTopicNotification,
   isValidFcmToken,
+  sendVendorNewOrderNotification,
+  sendVendorDriverClaimedNotification,
+  sendDriverAssignedNotification,
+  sendDriverPickupReadyNotification,
+  sendDriverOrderCancelledNotification,
+  sendDriverDisputeResolutionNotification,
+  sendDriverUnassignedNotification,
 };
 
 // Các helper bổ sung cho vòng đời đơn hàng & trả hàng
@@ -575,6 +656,13 @@ module.exports.sendOrderPlacedNotification = sendOrderPlacedNotification;
 module.exports.sendReturnRequestedNotification = sendReturnRequestedNotification;
 module.exports.sendReturnDecisionNotification = sendReturnDecisionNotification;
 module.exports.sendRefundProcessedNotification = sendRefundProcessedNotification;
+module.exports.sendVendorNewOrderNotification = sendVendorNewOrderNotification;
+module.exports.sendVendorDriverClaimedNotification = sendVendorDriverClaimedNotification;
+module.exports.sendDriverAssignedNotification = sendDriverAssignedNotification;
+module.exports.sendDriverPickupReadyNotification = sendDriverPickupReadyNotification;
+module.exports.sendDriverOrderCancelledNotification = sendDriverOrderCancelledNotification;
+module.exports.sendDriverDisputeResolutionNotification = sendDriverDisputeResolutionNotification;
+module.exports.sendDriverUnassignedNotification = sendDriverUnassignedNotification;
 
 /**
  * Gửi khuyến mãi mạnh mẽ: nếu targetType = 'topic' dùng topic, nếu 'all' lấy toàn bộ token.

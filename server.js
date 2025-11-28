@@ -32,6 +32,9 @@ const HubRoute = require("./routes/hub");
 const ShipmentRoute = require("./routes/shipment");
 const VendorWalletRoute = require("./routes/vendorWallet");
 const ServiceTicketRoute = require("./routes/serviceTicket");
+const RecommendationRoute = require("./routes/recommendation");
+const AnalyticsRoute = require("./routes/analytics");
+const startDeliveryWatchdog = require("./watchdogs/deliveryWatchdog");
 // const PromotionRoute = require("./routes/promotion");
 // Test FCM route (added for debugging) after dotenv loaded
 const { sendPushNotification, canUseAdmin, getFcmEnvInfo } = require('./utils/notification_service');
@@ -137,6 +140,8 @@ app.use("/api/hubs", HubRoute);
 app.use("/api/shipments", ShipmentRoute);
 app.use("/api/vendor-wallet", VendorWalletRoute);
 app.use("/api/service-center", ServiceTicketRoute);
+app.use("/api/recommendations", RecommendationRoute);
+app.use("/api/analytics", AnalyticsRoute);
 // app.use("/api/promotions", PromotionRoute);
 
 // Simple FCM test endpoint
@@ -199,6 +204,8 @@ server.listen(port, "0.0.0.0", () => {
   console.log(`Server listening at http://0.0.0.0:${port}`);
   console.log(`Admin Dashboard: http://localhost:${port}/admin\n`);
 });
+
+startDeliveryWatchdog(io);
 
 // Simple scheduler to auto-advance shipments demo (every 90s try advance Creating/Consolidating only)
 const Shipment = require("./models/Shipment");

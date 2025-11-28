@@ -7,6 +7,7 @@ const Appliances = require("../models/Appliances");
 const Driver = require("../models/Driver");
 const Store = require("../models/Store");
 const Hub = require("../models/Hub");
+const Shipment = require("../models/Shipment");
 const mongoose = require("mongoose");
 const {
   sendOrderStatusNotification,
@@ -15,6 +16,10 @@ const {
   sendReturnDecisionNotification,
   sendRefundProcessedNotification,
   sendPushNotification,
+  sendVendorNewOrderNotification,
+  sendDriverPickupReadyNotification,
+  sendDriverOrderCancelledNotification,
+  sendDriverDisputeResolutionNotification,
 } = require("../utils/notification_service");
 const { requestVnpayRefund } = require("../utils/vnpay");
 const { settleDriverDeliveryPayout } = require("../utils/driverPayout");
@@ -130,6 +135,245 @@ const computeDeliveryQuote = (
     normalizedStore,
     normalizedRecipient,
   };
+};
+
+const resolveStoreOwner = async (storeRef) => {
+  if (!storeRef) return null;
+  const raw = typeof storeRef.toObject === "function" ? storeRef.toObject() : storeRef;
+  if (raw.owner) {
+    return {
+      ownerId: raw.owner._id ? raw.owner._id : raw.owner,
+      title: raw.title || "",
+    };
+  }
+  try {
+    const doc = await Store.findById(raw._id || raw).select("owner title");
+    if (!doc) return null;
+    return { ownerId: doc.owner, title: doc.title || "" };
+  } catch (_) {
+    return null;
+  }
+};
+
+const findVendorUser = async (storeRef) => {
+  const info = await resolveStoreOwner(storeRef);
+  if (!info) return { user: null, storeTitle: "" };
+  const storeTitle = info.title || "";
+  if (!info.ownerId) return { user: null, storeTitle };
+  try {
+    const user = await User.findById(info.ownerId).select("fcm username");
+    return { user, storeTitle };
+  } catch (_) {
+    return { user: null, storeTitle };
+  }
+};
+
+const findDriverUser = async (driverId) => {
+  if (!driverId) return null;
+  try {
+    return await User.findById(driverId).select("fcm username");
+  } catch (_) {
+    return null;
+  }
+};
+
+const resolveProofPhoto = (payload = {}) => {
+  return (
+    payload.deliveryProofPhoto ||
+    payload.proofPhoto ||
+    payload.photoUrl ||
+    payload.photo ||
+    payload.imageUrl ||
+    ""
+  );
+};
+
+const LOGISTICS_STAGE_FLOW = [
+  {
+    key: "SellerPending",
+    label: "Cửa hàng xác nhận",
+    description: "Đang chờ cửa hàng đóng gói và bàn giao",
+  },
+  {
+    key: "ToOriginHub",
+    label: "Đang tới kho trung tâm",
+    description: "Đơn rời cửa hàng để chuyển về kho trung tâm",
+  },
+  {
+    key: "AtOriginHub",
+    label: "Đã quét tại kho trung tâm",
+    description: "Hệ thống ghi nhận đơn ở kho trung tâm",
+  },
+  {
+    key: "ToLocalHub",
+    label: "Đang tới kho địa phương",
+    description: "Hàng đang được trung chuyển xuống kho gần khách",
+  },
+  {
+    key: "AtLocalHub",
+    label: "Sẵn sàng tại kho địa phương",
+    description: "Kho địa phương đã sẵn sàng giao cho shipper",
+  },
+  {
+    key: "PickedUp",
+    label: "Shipper đã nhận hàng",
+    description: "Tài xế xác nhận nhận hàng từ kho/ cửa hàng",
+  },
+  {
+    key: "Delivering",
+    label: "Shipper đang giao",
+    description: "Đơn đang trên đường tới bạn",
+  },
+  {
+    key: "Delivered",
+    label: "Đơn đã giao",
+    description: "Cửa hàng xác nhận đã giao thành công",
+  },
+  {
+    key: "Cancelled",
+    label: "Đơn đã hủy",
+    description: "Đơn bị hủy bởi người dùng hoặc hệ thống",
+  },
+];
+
+const LOGISTICS_STAGE_INDEX = LOGISTICS_STAGE_FLOW.reduce((acc, stage, idx) => {
+  acc[stage.key] = idx;
+  return acc;
+}, {});
+
+const formatHubInfo = (hubDoc) => {
+  if (!hubDoc) return null;
+  const hub = typeof hubDoc.toObject === "function" ? hubDoc.toObject() : hubDoc;
+  return {
+    id: hub._id ? String(hub._id) : "",
+    code: hub.code || "",
+    name: hub.name || "",
+    type: hub.type || "",
+    address: hub.address || "",
+    latitude: hub.latitude,
+    longitude: hub.longitude,
+  };
+};
+
+const formatStoreInfo = (storeDoc) => {
+  if (!storeDoc) return null;
+  const store = typeof storeDoc.toObject === "function" ? storeDoc.toObject() : storeDoc;
+  return {
+    id: store._id ? String(store._id) : "",
+    title: store.title || "",
+    logoUrl: store.logoUrl || "",
+    imageUrl: store.imageUrl || "",
+    address: store.coords?.address || "",
+    latitude: store.coords?.latitude,
+    longitude: store.coords?.longitude,
+    time: store.time || "",
+  };
+};
+
+const formatDeliveryAddress = (addressDoc) => {
+  if (!addressDoc) return null;
+  const addr = typeof addressDoc.toObject === "function" ? addressDoc.toObject() : addressDoc;
+  return {
+    id: addr._id ? String(addr._id) : "",
+    addressLine1: addr.addressLine1 || addr.addressLine || "",
+    displayName: addr.displayName || "",
+    deliveryInstructions: addr.deliveryInstructions || "",
+    latitude: addr.latitude,
+    longitude: addr.longitude,
+  };
+};
+
+const resolveStageTimestamp = (stageKey, orderDoc, shipmentDoc) => {
+  const timeline = shipmentDoc?.timeline || {};
+  switch (stageKey) {
+    case "SellerPending":
+      return orderDoc.pickupReadyAt || orderDoc.createdAt || null;
+    case "ToOriginHub":
+      return timeline.DepartOriginAt || orderDoc.pickupAssignedAt || null;
+    case "AtOriginHub":
+      return timeline.ArriveOriginAt || null;
+    case "ToLocalHub":
+      return timeline.DepartLocalAt || null;
+    case "AtLocalHub":
+      return timeline.ArriveLocalAt || timeline.ReadyPickupAt || orderDoc.pickupReadyAt || null;
+    case "PickedUp":
+      return orderDoc.pickupConfirmedAt || null;
+    case "Delivering":
+      return orderDoc.deliveryProofAt || null;
+    case "Delivered":
+      return orderDoc.shopDeliveryConfirmedAt || orderDoc.deliveryProofAt || null;
+    case "Cancelled":
+      return orderDoc.cancelledAt || null;
+    default:
+      return null;
+  }
+};
+
+const buildLogisticsTimeline = (orderDoc, shipmentDoc) => {
+  const timeline = LOGISTICS_STAGE_FLOW.map((stage) => {
+    const timestamp = resolveStageTimestamp(stage.key, orderDoc, shipmentDoc);
+    let hubRef = null;
+    if (["ToOriginHub", "AtOriginHub"].includes(stage.key)) {
+      hubRef = formatHubInfo(orderDoc.originHub || shipmentDoc?.originHub);
+    } else if (["ToLocalHub", "AtLocalHub", "PickedUp"].includes(stage.key)) {
+      hubRef = formatHubInfo(orderDoc.localHub || shipmentDoc?.localHub);
+    }
+    return {
+      key: stage.key,
+      label: stage.label,
+      description: stage.description,
+      timestamp,
+      hub: hubRef,
+      state: "pending",
+    };
+  });
+
+  const currentStatus = orderDoc.logisticStatus || "SellerPending";
+  const currentIdx = LOGISTICS_STAGE_INDEX[currentStatus] ?? 0;
+  const isCancelled = currentStatus === "Cancelled" || orderDoc.orderStatus === "Cancelled";
+
+  timeline.forEach((stage, idx) => {
+    if (stage.key === "Cancelled") {
+      if (isCancelled) {
+        stage.timestamp = stage.timestamp || orderDoc.cancelledAt || orderDoc.updatedAt || null;
+        stage.description = orderDoc.cancellationReason || stage.description;
+        stage.state = stage.timestamp ? "done" : "active";
+      } else {
+        stage.state = "pending";
+      }
+      return;
+    }
+
+    if (isCancelled) {
+      stage.state = stage.timestamp ? "done" : "pending";
+      return;
+    }
+
+    if (idx < currentIdx) {
+      stage.state = "done";
+    } else if (idx === currentIdx) {
+      stage.state = stage.timestamp ? "done" : "active";
+    } else {
+      stage.state = "pending";
+    }
+  });
+
+  return timeline;
+};
+
+const emitOrderLogistics = (req, orderId, logisticStatus, extra = {}) => {
+  try {
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("order:logistics", {
+        orderId: String(orderId),
+        logisticStatus,
+        ...extra,
+      });
+    }
+  } catch (emitErr) {
+    console.warn("[orderController] emitOrderLogistics failed", emitErr?.message || emitErr);
+  }
 };
 
 const canVendorManageOrder = (orderDoc, user) => {
@@ -340,6 +584,18 @@ module.exports = {
         }
       } catch (e) { }
 
+      try {
+        const { user: vendorUser, storeTitle } = await findVendorUser(newOrder.storeId);
+        if (vendorUser && vendorUser.fcm && vendorUser.fcm !== 'none') {
+          await sendVendorNewOrderNotification(
+            vendorUser.fcm,
+            orderId,
+            storeTitle,
+            newOrder.grandTotal || newOrder.orderTotal || 0
+          );
+        }
+      } catch (_) { }
+
       res.status(201).json(response);
     } catch (error) {
       await session.abortTransaction();
@@ -359,7 +615,15 @@ module.exports = {
     }
 
     if (orderStatus) {
-      query.orderStatus = orderStatus;
+      const rawStatuses = String(orderStatus)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (rawStatuses.length === 1) {
+        query.orderStatus = rawStatuses[0];
+      } else if (rawStatuses.length > 1) {
+        query.orderStatus = { $in: rawStatuses };
+      }
     }
 
     try {
@@ -388,15 +652,26 @@ module.exports = {
       const baseQuery = { storeId: id, orderStatus: status };
       // Mặc định trước đây lọc paymentStatus=Completed khiến Vendor không thấy đơn Pending mới.
       // Giờ nếu không yêu cầu all thì vẫn giữ Completed, còn ?all=1 sẽ trả tất cả.
+      if (
+        orderStatus === "Delivered" &&
+        (userType === "Vendor" || userType === "Admin") &&
+        (!updatedOrder.shopDeliveryConfirmStatus || updatedOrder.shopDeliveryConfirmStatus === "None")
+      ) {
+        updatedOrder.shopDeliveryConfirmStatus = "Confirmed";
+        updatedOrder.shopDeliveryConfirmedAt = new Date();
+        updatedOrder.shopDeliveryConfirmedBy = userId;
+        if (req.body?.note) updatedOrder.shopDeliveryConfirmNote = req.body.note;
+        await updatedOrder.save();
+      }
       if (!includeAll) baseQuery.paymentStatus = "Completed";
       const start = Date.now();
       const orders = await Order.find(baseQuery)
         .select(
-          "userId deliveryAddress orderItems deliveryFee storeId storeCoords recipientCoords orderStatus createdAt updatedAt orderTotal grandTotal driverId pickupCode pickupReadyAt pickupAssignedAt pickupCheckinAt pickupConfirmedAt pickupCodeExpiresAt shopReadyBy shipperPickupBy pickupNotes handoverPhoto logisticStatus paymentMethod returnStatus returnReason returnRequestedAt returnProcessedAt refundAmount refundMethod refundAt refundReference"
+          "userId deliveryAddress orderItems deliveryFee storeId storeCoords recipientCoords orderStatus createdAt updatedAt orderTotal grandTotal driverId pickupCode pickupReadyAt pickupAssignedAt pickupCheckinAt pickupConfirmedAt pickupCodeExpiresAt shopReadyBy shipperPickupBy pickupNotes handoverPhoto logisticStatus paymentMethod returnStatus returnReason returnRequestedAt returnProcessedAt refundAmount refundMethod refundAt refundReference deliveryProofPhoto deliveryProofNote deliveryProofRecipient deliveryProofAt deliveryProofBy deliveryProofLocation shopDeliveryConfirmStatus shopDeliveryConfirmedAt shopDeliveryConfirmedBy shopDeliveryConfirmNote shopDeliveryRejectReason shopDeliveryRejectedAt"
         )
         .populate({
           path: "userId",
-          select: "phone profile",
+          select: "username phone email profile",
         })
         .populate({
           path: "storeId",
@@ -417,6 +692,44 @@ module.exports = {
     } catch (error) {
       console.error('[getStoreOrders][ERROR]', error);
       res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  listPendingDeliveryProofs: async (req, res) => {
+    const storeId = req.params.id;
+    const actor = req.user;
+    if (!actor || (actor.userType !== "Vendor" && actor.userType !== "Admin")) {
+      return res.status(403).json({ status: false, message: "Chỉ Vendor/Admin được phép xem danh sách này" });
+    }
+    if (!storeId) {
+      return res.status(400).json({ status: false, message: "Thiếu storeId" });
+    }
+
+    try {
+      const store = await Store.findById(storeId).select("owner title");
+      if (!store) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy cửa hàng" });
+      }
+      if (actor.userType === "Vendor" && String(store.owner) !== String(actor.id)) {
+        return res.status(403).json({ status: false, message: "Cửa hàng không thuộc quyền sở hữu của bạn" });
+      }
+
+      const orders = await Order.find({
+        storeId,
+        shopDeliveryConfirmStatus: "Pending",
+      })
+        .select(
+          "userId deliveryAddress orderItems deliveryFee orderStatus logisticStatus shopDeliveryConfirmStatus deliveryProofPhoto deliveryProofNote deliveryProofRecipient deliveryProofAt deliveryProofLocation createdAt updatedAt"
+        )
+        .populate({ path: "userId", select: "username phone" })
+        .populate({ path: "deliveryAddress", select: "addressLine1" })
+        .populate({ path: "orderItems.appliancesId", select: "title imageUrl price" })
+        .sort({ deliveryProofAt: -1, updatedAt: -1 })
+        .lean();
+
+      return res.status(200).json({ status: true, count: orders.length, data: orders });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
     }
   },
 
@@ -475,8 +788,8 @@ module.exports = {
         ? { returnRequestedAt: -1, createdAt: -1 }
         : { createdAt: -1 };
       const orders = await Order.find(query)
-        .select("userId deliveryAddress orderItems deliveryFee storeId storeCoords recipientCoords orderStatus createdAt updatedAt orderTotal grandTotal driverId paymentStatus paymentMethod pickupCode pickupReadyAt pickupAssignedAt pickupCheckinAt pickupConfirmedAt pickupCodeExpiresAt shopReadyBy shipperPickupBy pickupNotes handoverPhoto logisticStatus returnStatus returnReason returnRequestedAt returnProcessedAt refundAmount refundMethod refundAt refundReference")
-        .populate({ path: 'userId', select: 'phone profile' })
+        .select("userId deliveryAddress orderItems deliveryFee storeId storeCoords recipientCoords orderStatus createdAt updatedAt orderTotal grandTotal driverId paymentStatus paymentMethod pickupCode pickupReadyAt pickupAssignedAt pickupCheckinAt pickupConfirmedAt pickupCodeExpiresAt shopReadyBy shipperPickupBy pickupNotes handoverPhoto logisticStatus returnStatus returnReason returnRequestedAt returnProcessedAt refundAmount refundMethod refundAt refundReference deliveryProofPhoto deliveryProofNote deliveryProofRecipient deliveryProofAt deliveryProofBy deliveryProofLocation shopDeliveryConfirmStatus shopDeliveryConfirmedAt shopDeliveryConfirmedBy shopDeliveryConfirmNote shopDeliveryRejectReason shopDeliveryRejectedAt")
+        .populate({ path: 'userId', select: 'username phone email profile' })
         .populate({ path: 'storeId', select: 'title coords imageUrl logoUrl time' })
         .populate({ path: 'orderItems.appliancesId', select: 'title imageUrl time price stock' })
         .populate({ path: 'deliveryAddress', select: 'addressLine1' })
@@ -531,6 +844,21 @@ module.exports = {
       try {
         if (order.userId && order.userId.fcm) {
           await sendOrderStatusNotification(order.userId.fcm, "ReadyForPickup", orderId);
+        }
+      } catch (_) { }
+
+      try {
+        if (order.driverId) {
+          const driverUser = await findDriverUser(order.driverId);
+          if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+            await sendDriverPickupReadyNotification(
+              driverUser.fcm,
+              orderId,
+              order.storeId?.title || "",
+              pickupCode,
+              order.pickupCodeExpiresAt
+            );
+          }
         }
       } catch (_) { }
 
@@ -595,6 +923,21 @@ module.exports = {
             storeId: String(order.storeId?._id || order.storeId),
             pickupReadyAt: order.pickupReadyAt,
           });
+        }
+      } catch (_) { }
+
+      try {
+        if (order.driverId) {
+          const driverUser = await findDriverUser(order.driverId);
+          if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+            await sendDriverPickupReadyNotification(
+              driverUser.fcm,
+              orderId,
+              order.storeId?.title || "",
+              pickupCode,
+              order.pickupCodeExpiresAt
+            );
+          }
         }
       } catch (_) { }
 
@@ -728,6 +1071,11 @@ module.exports = {
       order.logisticStatus = "Delivering";
       await order.save();
 
+      emitOrderLogistics(req, orderId, order.logisticStatus, {
+        stage: "PickedUp",
+        pickupConfirmedAt: order.pickupConfirmedAt,
+      });
+
       try {
         if (order.userId && order.userId.fcm) {
           await sendOrderStatusNotification(order.userId.fcm, "PickedUp", orderId);
@@ -746,6 +1094,523 @@ module.exports = {
       } catch (_) { }
 
       return res.status(200).json({ status: true, message: "Đã xác nhận nhận hàng từ cửa hàng" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  submitDeliveryProof: async (req, res) => {
+    const actor = req.user;
+    if (!actor || actor.userType !== "Driver") {
+      return res.status(403).json({ status: false, message: "Chỉ tài xế mới gửi được bằng chứng bàn giao" });
+    }
+
+    const orderId = req.params.id;
+    const {
+      note,
+      deliveryNote,
+      recipientName,
+      latitude,
+      longitude,
+      deliveryLatitude,
+      deliveryLongitude,
+      keepConfirmation,
+      retainConfirmation,
+      forceReconfirm,
+      supplementOnly,
+      supplemental,
+      appendOnly,
+    } = req.body || {};
+    const proofPhoto = resolveProofPhoto(req.body || {});
+    if (!proofPhoto) {
+      return res.status(400).json({ status: false, message: "Vui lòng đính kèm ảnh bàn giao" });
+    }
+
+    try {
+      const order = await Order.findById(orderId)
+        .populate({ path: "userId", select: "fcm" })
+        .populate({ path: "storeId", select: "owner title" });
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+      if (!order.driverId || String(order.driverId) !== String(actor.id)) {
+        return res.status(403).json({ status: false, message: "Bạn không phải shipper của đơn này" });
+      }
+      const allowedStatuses = ["PickedUp", "Delivering", "Delivered"];
+      if (!allowedStatuses.includes(order.orderStatus)) {
+        return res.status(400).json({ status: false, message: "Đơn chưa ở trạng thái cho phép hoàn tất" });
+      }
+
+      const isSupplement = Boolean(
+        supplementOnly || supplemental || appendOnly || req.body?.additionalProof
+      );
+      const forceReview = Boolean(forceReconfirm || req.body?.forceReview);
+      let codPaymentUpdated = false;
+      order.orderStatus = "Delivering";
+      order.logisticStatus = "Delivering";
+      order.deliveryProofPhoto = proofPhoto;
+      order.deliveryProofNote = note || deliveryNote || order.deliveryProofNote || "";
+      if (recipientName) {
+        order.deliveryProofRecipient = recipientName;
+      }
+      order.deliveryProofAt = new Date();
+      order.deliveryProofBy = actor.id;
+      const lat = Number(latitude ?? deliveryLatitude);
+      const lng = Number(longitude ?? deliveryLongitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        order.deliveryProofLocation = { latitude: lat, longitude: lng };
+      }
+      const alreadyConfirmed = order.shopDeliveryConfirmStatus === "Confirmed";
+      const requestKeep = Boolean(keepConfirmation || retainConfirmation);
+      const shouldKeepConfirmation = !forceReview && (isSupplement || requestKeep || alreadyConfirmed);
+
+      if (!Array.isArray(order.deliveryProofAlbum)) {
+        order.deliveryProofAlbum = [];
+      }
+      order.deliveryProofAlbum.push(proofPhoto);
+      order.deliveryProofAlbum = order.deliveryProofAlbum
+        .filter((url) => typeof url === "string" && url.trim().length > 0)
+        .slice(-6);
+
+      if (!shouldKeepConfirmation) {
+        order.shopDeliveryConfirmStatus = "Pending";
+        order.shopDeliveryConfirmedAt = null;
+        order.shopDeliveryConfirmedBy = "";
+        order.shopDeliveryConfirmNote = "";
+        order.shopDeliveryRejectReason = "";
+        order.shopDeliveryRejectedAt = null;
+        order.deliveryIssueStatus = "None";
+        order.deliveryIssueNote = "";
+        order.deliveryProofReminderSentAt = null;
+        order.deliveryProofEscalatedAt = null;
+      }
+
+      if (!isSupplement && order.customerDisputeStatus === "Pending") {
+        order.customerDisputeStatus = "Resolved";
+        order.customerDisputeResolvedAt = new Date();
+        order.customerDisputeResolution = "Driver đã cập nhật bằng chứng giao hàng";
+      }
+
+      if (
+        order.paymentMethod === "COD" &&
+        (order.paymentStatus === "Pending" || order.paymentStatus === "Unpaid")
+      ) {
+        order.paymentStatus = "Completed";
+        order.paymentStatusUpdatedAt = new Date();
+        codPaymentUpdated = true;
+      }
+      await order.save();
+
+      if (order.driverId) {
+        try {
+          const driverDoc = await Driver.findOne({ user: order.driverId });
+          if (driverDoc && driverDoc.status !== "available") {
+            driverDoc.status = "available";
+            await driverDoc.save();
+            try {
+              const io = req.app.get("io");
+              if (io) {
+                io.emit("driver:status", {
+                  driverId: String(order.driverId),
+                  status: "available",
+                });
+              }
+            } catch (_) { }
+          }
+        } catch (driverErr) {
+          console.warn("[submitDeliveryProof] update driver status fail", driverErr?.message || driverErr);
+        }
+      }
+
+      emitOrderLogistics(req, orderId, order.logisticStatus, {
+        stage: "ProofSubmitted",
+        deliveryProofAt: order.deliveryProofAt,
+      });
+
+      try {
+        const storeOwnerId = order.storeId?.owner || order.storeId?.owner?._id;
+        if (storeOwnerId) {
+          const vendor = await User.findById(storeOwnerId).select("fcm username");
+          if (vendor && vendor.fcm && vendor.fcm !== "none") {
+            const orderCode = String(order._id).slice(-6);
+            await sendPushNotification(
+              vendor.fcm,
+              "Shipper đã gửi bằng chứng giao hàng",
+              `Đơn #${orderCode} đã được cập nhật ảnh bàn giao, vui lòng xác nhận`,
+              {
+                type: "delivery_proof",
+                orderId: String(order._id),
+                storeTitle: order.storeId?.title || "",
+              }
+            );
+          }
+        }
+      } catch (notifyErr) {
+        console.warn("[submitDeliveryProof] notify vendor failed", notifyErr?.message || notifyErr);
+      }
+
+      try {
+        const io = req.app.get("io");
+        if (io) {
+          io.emit("order:delivery_proof", {
+            orderId: String(order._id),
+            driverId: String(actor.id),
+            shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+            deliveryProofAt: order.deliveryProofAt,
+          });
+        }
+      } catch (_) { }
+
+      return res.status(200).json({
+        status: true,
+        message: "Đã gửi bằng chứng giao hàng, chờ shop xác nhận",
+        data: {
+          orderId,
+          shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+          deliveryProofPhoto: order.deliveryProofPhoto,
+          deliveryProofAlbum: order.deliveryProofAlbum,
+          confirmationRetained: shouldKeepConfirmation,
+          supplemental: isSupplement,
+          codPaymentCompleted: codPaymentUpdated,
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  shopConfirmDelivery: async (req, res) => {
+    const actor = req.user;
+    if (!actor || (actor.userType !== "Vendor" && actor.userType !== "Admin")) {
+      return res.status(403).json({ status: false, message: "Chỉ cửa hàng hoặc Admin mới xác nhận giao hàng" });
+    }
+
+    const orderId = req.params.id;
+    const actionRaw = (req.body?.action || req.body?.decision || "confirm").toLowerCase();
+    const action = actionRaw === "reject" ? "reject" : "confirm";
+    const note = req.body?.note || req.body?.reason || "";
+
+    try {
+      const order = await Order.findById(orderId)
+        .populate({ path: "storeId", select: "owner title" })
+        .populate({ path: "userId", select: "fcm" });
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+
+      if (actor.userType === "Vendor") {
+        const ownerId = order.storeId?.owner || order.storeId?.owner?._id;
+        if (!ownerId || String(ownerId) !== String(actor.id)) {
+          return res.status(403).json({ status: false, message: "Đơn hàng không thuộc cửa hàng của bạn" });
+        }
+      }
+
+      if (action === "confirm") {
+        order.shopDeliveryConfirmStatus = "Confirmed";
+        order.shopDeliveryConfirmedAt = new Date();
+        order.shopDeliveryConfirmedBy = actor.id;
+        if (note) order.shopDeliveryConfirmNote = note;
+        order.shopDeliveryRejectReason = "";
+        order.shopDeliveryRejectedAt = null;
+        order.orderStatus = "Delivered";
+        order.logisticStatus = "Delivered";
+        order.deliveryIssueStatus = "Resolved";
+        order.deliveryIssueNote = "";
+        if (order.customerDisputeStatus === "Pending") {
+          order.customerDisputeStatus = "Resolved";
+          order.customerDisputeResolvedAt = new Date();
+          order.customerDisputeResolution = note || "Shop xác nhận khách đã nhận";
+        }
+        await order.save();
+
+        emitOrderLogistics(req, orderId, order.logisticStatus, {
+          stage: "Delivered",
+          shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+        });
+
+        // Release driver & settle payout once shop confirms
+        if (order.driverId) {
+          try {
+            const driver = await Driver.findOne({ user: order.driverId });
+            if (driver && driver.status !== "available") {
+              driver.status = "available";
+              await driver.save();
+            }
+          } catch (driverErr) {
+            console.warn("[shopConfirmDelivery] update driver status fail", driverErr?.message || driverErr);
+          }
+          try {
+            await settleDriverDeliveryPayout(order);
+          } catch (payoutErr) {
+            console.warn("[shopConfirmDelivery] payout fail", payoutErr?.message || payoutErr);
+          }
+        }
+
+        try {
+          if (order.userId && order.userId.fcm) {
+            await sendOrderStatusNotification(order.userId.fcm, "Delivered", orderId);
+          }
+        } catch (_) { }
+
+        try {
+          const driverUser = await User.findById(order.driverId).select("fcm username");
+          if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+            await sendPushNotification(
+              driverUser.fcm,
+              "Shop đã xác nhận đơn giao",
+              `Đơn ${String(order._id).slice(-6)} đã được shop chấp nhận bằng chứng giao hàng`,
+              { type: "delivery_confirmed", orderId: String(order._id) }
+            );
+          }
+        } catch (_) { }
+
+        try {
+          const io = req.app.get("io");
+          if (io) {
+            io.emit("order:delivery_confirm", {
+              orderId: String(order._id),
+              shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+            });
+          }
+        } catch (_) { }
+
+        return res.status(200).json({ status: true, message: "Đã xác nhận khách đã nhận hàng" });
+      }
+
+      // Reject proof
+      order.shopDeliveryConfirmStatus = "Rejected";
+      order.shopDeliveryRejectReason = note || "Shop từ chối bằng chứng giao hàng";
+      order.shopDeliveryRejectedAt = new Date();
+      order.orderStatus = "Delivering";
+      order.logisticStatus = "Delivering";
+      order.deliveryIssueStatus = "Escalated";
+      order.deliveryIssueNote = order.shopDeliveryRejectReason;
+      await order.save();
+
+      emitOrderLogistics(req, orderId, order.logisticStatus, {
+        stage: "DeliveryRejected",
+        shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+      });
+
+      try {
+        const driverUser = await User.findById(order.driverId).select("fcm username");
+        if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+          await sendPushNotification(
+            driverUser.fcm,
+            "Shop chưa chấp nhận bằng chứng",
+            `Vui lòng liên hệ shop để xử lý lại đơn ${String(order._id).slice(-6)}`,
+            { type: "delivery_rejected", orderId: String(order._id) }
+          );
+        }
+      } catch (_) { }
+
+      try {
+        if (order.userId && order.userId.fcm && order.userId.fcm !== "none") {
+          await sendPushNotification(
+            order.userId.fcm,
+            "Đơn hàng đang được xác minh",
+            "Shop đang kiểm tra lại bằng chứng giao hàng, chúng tôi sẽ cập nhật sớm.",
+            { type: "delivery_rejected", orderId: String(order._id) }
+          );
+        }
+      } catch (_) { }
+
+      try {
+        const io = req.app.get("io");
+        if (io) {
+          io.emit("order:delivery_confirm", {
+            orderId: String(order._id),
+            shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+          });
+        }
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: "Đã từ chối bằng chứng giao hàng" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  createDeliveryDispute: async (req, res) => {
+    const orderId = req.params.id;
+    const userId = req.user.id;
+    const { reason = "", note = "" } = req.body || {};
+
+    try {
+      const order = await Order.findById(orderId)
+        .populate({ path: "storeId", select: "owner title" })
+        .populate({ path: "userId", select: "fcm username" });
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+      if (String(order.userId?._id || order.userId) !== String(userId)) {
+        return res.status(403).json({ status: false, message: "Bạn không có quyền khiếu nại đơn này" });
+      }
+      if (!order.deliveryProofPhoto) {
+        return res.status(400).json({ status: false, message: "Đơn chưa có bằng chứng giao hàng để khiếu nại" });
+      }
+
+      order.customerDisputeStatus = "Pending";
+      order.customerDisputeNote = (note || reason || "Khách báo chưa nhận hàng").trim();
+      order.customerDisputeAt = new Date();
+      order.deliveryIssueStatus = "Disputed";
+      order.deliveryIssueNote = order.customerDisputeNote;
+      await order.save();
+
+      try {
+        const ownerId = order.storeId?.owner || order.storeId?.owner?._id;
+        if (ownerId) {
+          const vendor = await User.findById(ownerId).select("fcm username");
+          if (vendor && vendor.fcm && vendor.fcm !== "none") {
+            await sendPushNotification(
+              vendor.fcm,
+              "Khách báo chưa nhận hàng",
+              `Đơn ${String(order._id).slice(-6)} đang bị khiếu nại, vui lòng kiểm tra`,
+              { type: "delivery_dispute", orderId: String(order._id) }
+            );
+          }
+        }
+      } catch (_) { }
+
+      try {
+        if (order.driverId) {
+          const driver = await User.findById(order.driverId).select("fcm username");
+          if (driver && driver.fcm && driver.fcm !== "none") {
+            await sendPushNotification(
+              driver.fcm,
+              "Khách báo chưa nhận hàng",
+              `Vui lòng phối hợp với shop để xử lý đơn ${String(order._id).slice(-6)}`,
+              { type: "delivery_dispute", orderId: String(order._id) }
+            );
+          }
+        }
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: "Đã ghi nhận khiếu nại, shop sẽ phản hồi sớm" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  reviewDeliveryDispute: async (req, res) => {
+    const orderId = req.params.id;
+    const actor = req.user;
+    const { action, note = "" } = req.body || {};
+
+    if (!action || !["resolve", "reject"].includes(action)) {
+      return res.status(400).json({ status: false, message: "Hành động không hợp lệ" });
+    }
+
+    if (actor.userType !== "Vendor" && actor.userType !== "Admin") {
+      return res.status(403).json({ status: false, message: "Chỉ shop/Admin mới xử lý khiếu nại" });
+    }
+
+    try {
+      const order = await Order.findById(orderId).populate({ path: "storeId", select: "owner title" }).populate({ path: "userId", select: "fcm username" });
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+      if (actor.userType === "Vendor" && !canVendorManageOrder(order, actor)) {
+        return res.status(403).json({ status: false, message: "Đơn không thuộc cửa hàng của bạn" });
+      }
+      if (order.customerDisputeStatus !== "Pending") {
+        return res.status(400).json({ status: false, message: "Đơn không có khiếu nại đang chờ" });
+      }
+
+      const resolutionNote = note || (action === "resolve" ? "Shop đã xử lý khiếu nại" : "Shop từ chối khiếu nại");
+      order.customerDisputeResolvedAt = new Date();
+      order.customerDisputeResolution = resolutionNote;
+      order.deliveryIssueNote = resolutionNote;
+      if (action === "resolve") {
+        order.customerDisputeStatus = "Resolved";
+        order.deliveryIssueStatus = "Resolved";
+      } else {
+        order.customerDisputeStatus = "Rejected";
+        order.deliveryIssueStatus = "Escalated";
+      }
+      await order.save();
+
+      try {
+        if (order.userId && order.userId.fcm && order.userId.fcm !== "none") {
+          await sendPushNotification(
+            order.userId.fcm,
+            "Kết quả xử lý khiếu nại",
+            resolutionNote,
+            { type: "delivery_dispute_update", orderId: String(order._id) }
+          );
+        }
+      } catch (_) { }
+
+      try {
+        if (order.driverId) {
+          const driverUser = await findDriverUser(order.driverId);
+          if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+            await sendDriverDisputeResolutionNotification(
+              driverUser.fcm,
+              orderId,
+              resolutionNote
+            );
+          }
+        }
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: "Đã cập nhật khiếu nại" });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  escalateDeliveryIssue: async (req, res) => {
+    const orderId = req.params.id;
+    const actor = req.user;
+    const { note = "" } = req.body || {};
+
+    if (actor.userType !== "Vendor" && actor.userType !== "Admin") {
+      return res.status(403).json({ status: false, message: "Chỉ shop/Admin mới có quyền" });
+    }
+
+    try {
+      const order = await Order.findById(orderId)
+        .populate({ path: "storeId", select: "owner title" })
+        .populate({ path: "userId", select: "fcm username" });
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+      if (actor.userType === "Vendor" && !canVendorManageOrder(order, actor)) {
+        return res.status(403).json({ status: false, message: "Đơn không thuộc cửa hàng của bạn" });
+      }
+
+      order.deliveryIssueStatus = "Escalated";
+      order.deliveryIssueNote = note || "Shop yêu cầu xác minh lại giao hàng";
+      order.deliveryProofEscalatedAt = new Date();
+      await order.save();
+
+      try {
+        if (order.driverId) {
+          const driver = await User.findById(order.driverId).select("fcm username");
+          if (driver && driver.fcm && driver.fcm !== "none") {
+            await sendPushNotification(
+              driver.fcm,
+              "Shop yêu cầu cập nhật",
+              `Vui lòng liên hệ shop & cung cấp lại bằng chứng cho đơn ${String(order._id).slice(-6)}`,
+              { type: "delivery_escalated", orderId: String(order._id) }
+            );
+          }
+        }
+      } catch (_) { }
+
+      try {
+        if (order.userId && order.userId.fcm && order.userId.fcm !== "none") {
+          await sendPushNotification(
+            order.userId.fcm,
+            "Đơn đang được xác minh",
+            "Shop đang phối hợp với shipper để hoàn tất giao hàng",
+            { type: "delivery_escalated", orderId: String(order._id) }
+          );
+        }
+      } catch (_) { }
+
+      return res.status(200).json({ status: true, message: "Đã escalated đơn hàng" });
     } catch (error) {
       return res.status(500).json({ status: false, message: error.message });
     }
@@ -774,6 +1639,8 @@ module.exports = {
         await session.abortTransaction();
         return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
       }
+
+      const previousDriverId = order.driverId ? String(order.driverId) : "";
 
       const ownerId = String(order.userId?._id || order.userId);
       const isOwner = ownerId === String(userId);
@@ -898,6 +1765,19 @@ module.exports = {
       } catch (_) { }
 
       try {
+        if (previousDriverId) {
+          const driverUser = await findDriverUser(previousDriverId);
+          if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+            await sendDriverOrderCancelledNotification(
+              driverUser.fcm,
+              orderId,
+              cancelReason
+            );
+          }
+        }
+      } catch (_) { }
+
+      try {
         const io = req.app.get("io");
         if (io) {
           io.emit("order:updated", {
@@ -948,6 +1828,9 @@ module.exports = {
     if (orderStatus === "Cancelled" && userType === "Client") {
       return module.exports.cancelOrder(req, res);
     }
+    if (orderStatus === "Delivered" && userType === "Driver") {
+      return module.exports.submitDeliveryProof(req, res);
+    }
 
     try {
       const existingOrder = await Order.findById(orderId);
@@ -956,6 +1839,15 @@ module.exports = {
         return res
           .status(404)
           .json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+
+      if (
+        orderStatus === "Delivered" &&
+        (userType === "Vendor" || userType === "Admin") &&
+        existingOrder.shopDeliveryConfirmStatus === "Pending"
+      ) {
+        req.body.action = req.body.action || "confirm";
+        return module.exports.shopConfirmDelivery(req, res);
       }
 
       // Kiểm tra quyền: User chỉ được hủy đơn của mình, Vendor/Admin có thể update bất kỳ
@@ -1066,11 +1958,28 @@ module.exports = {
           );
         }
 
+        if (orderStatus === "Cancelled" && updatedOrder.driverId) {
+          try {
+            const driverUser = await findDriverUser(updatedOrder.driverId);
+            if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+              await sendDriverOrderCancelledNotification(
+                driverUser.fcm,
+                orderId,
+                cancellationReason
+              );
+            }
+          } catch (_) { }
+        }
+
         // Free driver when delivered
-        if (orderStatus === "Delivered" && updatedOrder.driverId) {
+        if (
+          orderStatus === "Delivered" &&
+          updatedOrder.driverId &&
+          updatedOrder.shopDeliveryConfirmStatus === "Confirmed"
+        ) {
           try {
             const drv = await Driver.findOne({ user: updatedOrder.driverId });
-            if (drv) {
+            if (drv && drv.status !== "available") {
               drv.status = "available";
               await drv.save();
             }
@@ -1123,6 +2032,135 @@ module.exports = {
     return res.status(410).json({ status: false, message: 'Driver proposal đã tắt. Không cần xoay vòng.' });
   },
 
+  getLogisticsTimeline: async (req, res) => {
+    const orderId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({ status: false, message: "orderId không hợp lệ" });
+    }
+
+    try {
+      const order = await Order.findById(orderId)
+        .populate({ path: "storeId", select: "title logoUrl imageUrl coords owner time" })
+        .populate({ path: "originHub", select: "name code type address latitude longitude" })
+        .populate({ path: "localHub", select: "name code type address latitude longitude" })
+        .populate({ path: "deliveryAddress", select: "addressLine1 addressLine displayName deliveryInstructions latitude longitude" });
+
+      if (!order) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy đơn hàng" });
+      }
+
+      const actor = req.user;
+      if (actor.userType === "Client" && String(order.userId) !== String(actor.id)) {
+        return res.status(403).json({ status: false, message: "Bạn không có quyền xem đơn hàng này" });
+      }
+      if (actor.userType === "Vendor" && !canVendorManageOrder(order, actor)) {
+        return res.status(403).json({ status: false, message: "Đơn không thuộc cửa hàng của bạn" });
+      }
+      if (actor.userType === "Driver" && order.driverId && String(order.driverId) !== String(actor.id)) {
+        return res.status(403).json({ status: false, message: "Bạn không phải shipper của đơn này" });
+      }
+
+      const shipmentDoc = await Shipment.findOne({ orders: order._id })
+        .sort({ createdAt: -1 })
+        .populate({ path: "originHub", select: "name code type address latitude longitude" })
+        .populate({ path: "localHub", select: "name code type address latitude longitude" })
+        .lean();
+
+      const orderPayload = order.toObject({ virtuals: false, getters: false });
+      const timeline = buildLogisticsTimeline(orderPayload, shipmentDoc);
+      const progressStages = timeline.filter((stage) => stage.key !== "Cancelled");
+      const doneStages = progressStages.filter((stage) => stage.state === "done").length;
+      const progressPercent = progressStages.length
+        ? Math.min(100, Math.round((doneStages / progressStages.length) * 100))
+        : 0;
+      const nextStage = timeline.find((stage) => stage.state === "active")
+        || timeline.find((stage) => stage.state === "pending")
+        || null;
+
+      let driverProfile = null;
+      if (orderPayload.driverId) {
+        try {
+          const [driverUser, driverRecord] = await Promise.all([
+            User.findById(orderPayload.driverId).select("username phone profile"),
+            Driver.findOne({ user: orderPayload.driverId }).select("vehicleType vehiclePlate status"),
+          ]);
+          driverProfile = {
+            id: String(orderPayload.driverId),
+            name: driverUser?.username || "",
+            phone: driverUser?.phone || "",
+            avatar: driverUser?.profile || "",
+            status: driverRecord?.status || "offline",
+            vehicleType: driverRecord?.vehicleType || "",
+            vehiclePlate: driverRecord?.vehiclePlate || "",
+            lastKnownLocation: orderPayload.driverLocation || null,
+            lastUpdate: orderPayload.driverLocation?.updatedAt || null,
+          };
+        } catch (driverErr) {
+          console.warn("[getLogisticsTimeline] driver lookup failed", driverErr?.message || driverErr);
+        }
+      }
+
+      const payload = {
+        orderId: String(order._id),
+        orderCode: String(order._id).slice(-6),
+        orderStatus: orderPayload.orderStatus,
+        logisticStatus: orderPayload.logisticStatus,
+        deliveryIssueStatus: orderPayload.deliveryIssueStatus,
+        shopDeliveryConfirmStatus: orderPayload.shopDeliveryConfirmStatus,
+        customerDisputeStatus: orderPayload.customerDisputeStatus,
+        timeline,
+        progressPercent,
+        nextStage,
+        hubs: {
+          origin: formatHubInfo(orderPayload.originHub || shipmentDoc?.originHub),
+          local: formatHubInfo(orderPayload.localHub || shipmentDoc?.localHub),
+        },
+        shipment: shipmentDoc
+          ? {
+            id: String(shipmentDoc._id),
+            code: shipmentDoc.code,
+            status: shipmentDoc.status,
+            timeline: shipmentDoc.timeline,
+          }
+          : null,
+        store: formatStoreInfo(orderPayload.storeId),
+        deliveryAddress: formatDeliveryAddress(orderPayload.deliveryAddress),
+        driver: driverProfile,
+        driverLocation: orderPayload.driverLocation || null,
+        deliveryProof: {
+          photo: orderPayload.deliveryProofPhoto || "",
+          note: orderPayload.deliveryProofNote || "",
+          recipient: orderPayload.deliveryProofRecipient || "",
+          deliveredAt: orderPayload.deliveryProofAt || null,
+          location: orderPayload.deliveryProofLocation || null,
+        },
+        shopConfirmation: {
+          status: orderPayload.shopDeliveryConfirmStatus || "None",
+          confirmedAt: orderPayload.shopDeliveryConfirmedAt || null,
+          confirmedBy: orderPayload.shopDeliveryConfirmedBy || "",
+          note: orderPayload.shopDeliveryConfirmNote || "",
+          rejectReason: orderPayload.shopDeliveryRejectReason || "",
+          rejectedAt: orderPayload.shopDeliveryRejectedAt || null,
+        },
+        dispute: {
+          status: orderPayload.customerDisputeStatus || "None",
+          note: orderPayload.customerDisputeNote || "",
+          submittedAt: orderPayload.customerDisputeAt || null,
+          resolvedAt: orderPayload.customerDisputeResolvedAt || null,
+          resolution: orderPayload.customerDisputeResolution || "",
+          evidence: orderPayload.customerDisputeEvidence || [],
+        },
+        socketEvent: "order:logistics",
+        updatedAt: orderPayload.updatedAt,
+        createdAt: orderPayload.createdAt,
+      };
+
+      return res.status(200).json({ status: true, data: payload });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
   getOrderDetails: async (req, res) => {
     const orderId = req.params.id;
 
@@ -1166,7 +2204,9 @@ module.exports = {
     const userId = req.user.id;
 
     try {
-      const order = await Order.findById(orderId);
+      const order = await Order.findById(orderId)
+        .populate({ path: "storeId", select: "owner title" })
+        .populate({ path: "userId", select: "fcm username" });
 
       if (!order) {
         return res.status(404).json({
@@ -1176,42 +2216,138 @@ module.exports = {
       }
 
       // Kiểm tra quyền sở hữu đơn hàng
-      if (order.userId.toString() !== userId) {
+      const orderOwnerId = order.userId?._id || order.userId;
+      if (String(orderOwnerId) !== String(userId)) {
         return res.status(403).json({
           status: false,
           message: "Bạn không có quyền xác nhận đơn hàng này",
         });
       }
 
-      // Kiểm tra đơn hàng đã được giao chưa
-      if (order.orderStatus !== "Delivered") {
+      const allowedStatuses = ["Delivering", "Delivered"];
+      if (!allowedStatuses.includes(order.orderStatus)) {
         return res.status(400).json({
           status: false,
-          message: "Chỉ có thể xác nhận đơn hàng đã được giao",
+          message: "Đơn hàng chưa sẵn sàng để xác nhận",
         });
       }
 
-      // Với COD: Cập nhật paymentStatus từ Pending → Completed
-      // Với VNPay: Đã Completed rồi, vẫn cho xác nhận để đánh dấu đã nhận hàng
-      if (order.paymentMethod === "COD" && order.paymentStatus === "Pending") {
-        order.paymentStatus = "Completed";
-        await order.save();
-        return res.status(200).json({
-          status: true,
-          message: "Xác nhận nhận hàng và hoàn tất thanh toán COD thành công",
+      if (!order.deliveryProofPhoto) {
+        return res.status(400).json({
+          status: false,
+          message: "Shipper chưa đính kèm bằng chứng giao hàng",
         });
-      } else if (order.paymentStatus === "Completed") {
-        // Đơn đã thanh toán online, chỉ xác nhận đã nhận
-        return res.status(200).json({
-          status: true,
-          message: "Xác nhận đã nhận hàng thành công",
-        });
-      } else {
+      }
+
+      const alreadyConfirmed = order.shopDeliveryConfirmStatus === "Confirmed";
+      const now = new Date();
+
+      const normalizedPayment = (order.paymentStatus || "").toLowerCase();
+      const paymentComplete = ["completed", "paid", "settled"].includes(normalizedPayment);
+      if (!paymentComplete) {
+        if (order.paymentMethod === "COD") {
+          return res.status(400).json({
+            status: false,
+            message: "Shipper chưa cập nhật biên nhận COD",
+          });
+        }
         return res.status(400).json({
           status: false,
           message: "Trạng thái thanh toán không hợp lệ",
         });
       }
+
+      if (!alreadyConfirmed) {
+        order.shopDeliveryConfirmStatus = "Confirmed";
+        order.shopDeliveryConfirmedAt = now;
+        order.shopDeliveryConfirmedBy = userId;
+        order.shopDeliveryConfirmNote = "Khách xác nhận đã nhận hàng";
+        order.shopDeliveryRejectReason = "";
+        order.shopDeliveryRejectedAt = null;
+        order.orderStatus = "Delivered";
+        order.logisticStatus = "Delivered";
+        order.deliveryIssueStatus = "Resolved";
+        order.deliveryIssueNote = "";
+        if (order.customerDisputeStatus === "Pending") {
+          order.customerDisputeStatus = "Resolved";
+          order.customerDisputeResolvedAt = now;
+          order.customerDisputeResolution = "Khách xác nhận đã nhận hàng";
+        }
+      }
+
+      await order.save();
+
+      if (!alreadyConfirmed) {
+        emitOrderLogistics(req, orderId, order.logisticStatus, {
+          stage: "Delivered",
+          shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+        });
+
+        if (order.driverId) {
+          try {
+            const driver = await Driver.findOne({ user: order.driverId });
+            if (driver && driver.status !== "available") {
+              driver.status = "available";
+              await driver.save();
+            }
+          } catch (driverErr) {
+            console.warn("[confirmReceived] update driver status fail", driverErr?.message || driverErr);
+          }
+          try {
+            await settleDriverDeliveryPayout(order);
+          } catch (payoutErr) {
+            console.warn("[confirmReceived] payout fail", payoutErr?.message || payoutErr);
+          }
+        }
+
+        try {
+          const driverUser = await User.findById(order.driverId).select("fcm username");
+          if (driverUser && driverUser.fcm && driverUser.fcm !== "none") {
+            await sendPushNotification(
+              driverUser.fcm,
+              "Khách đã xác nhận giao hàng",
+              `Đơn ${String(order._id).slice(-6)} đã được khách xác nhận hoàn tất`,
+              { type: "delivery_confirmed", orderId: String(order._id) }
+            );
+          }
+        } catch (_) { }
+
+        try {
+          const ownerId = order.storeId?.owner || order.storeId?.owner?._id;
+          if (ownerId) {
+            const vendorUser = await User.findById(ownerId).select("fcm username");
+            if (vendorUser && vendorUser.fcm && vendorUser.fcm !== "none") {
+              await sendPushNotification(
+                vendorUser.fcm,
+                "Khách đã xác nhận",
+                `Đơn ${String(order._id).slice(-6)} đã được khách xác nhận thành công`,
+                { type: "delivery_confirmed", orderId: String(order._id) }
+              );
+            }
+          }
+        } catch (_) { }
+
+        try {
+          const io = req.app.get("io");
+          if (io) {
+            io.emit("order:delivery_confirm", {
+              orderId: String(order._id),
+              shopDeliveryConfirmStatus: order.shopDeliveryConfirmStatus,
+            });
+          }
+        } catch (_) { }
+      }
+
+      try {
+        if (order.userId && order.userId.fcm && order.userId.fcm !== "none") {
+          await sendOrderStatusNotification(order.userId.fcm, "Delivered", orderId);
+        }
+      } catch (_) { }
+
+      return res.status(200).json({
+        status: true,
+        message: "Xác nhận đã nhận hàng thành công",
+      });
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
     }
@@ -1471,7 +2607,12 @@ module.exports = {
       order.logisticStatus = targetStatus;
       // Sync orderStatus for delivery phases
       if (targetStatus === "Delivering") order.orderStatus = "Delivering";
-      if (targetStatus === "Delivered") order.orderStatus = "Delivered";
+      if (targetStatus === "Delivered") {
+        order.orderStatus = "Delivered";
+        order.shopDeliveryConfirmStatus = "Confirmed";
+        order.shopDeliveryConfirmedAt = new Date();
+        order.shopDeliveryConfirmedBy = req.user.id;
+      }
       await order.save();
       try {
         const io = req.app.get("io");

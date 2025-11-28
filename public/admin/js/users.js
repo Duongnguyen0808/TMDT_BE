@@ -115,7 +115,7 @@ async function viewUser(userId) {
 }
 
 function displayUserDetails(userData) {
-  const { user, orderStats, storeInfo } = userData;
+  const { user, orderStats, storeInfo, driverStats, shipperProfile } = userData;
   const modal = document.getElementById("userDetailModal");
   const content = document.getElementById("user-detail-content");
 
@@ -180,6 +180,14 @@ function displayUserDetails(userData) {
           <strong>📅 Ngày tạo</strong>
           <span>${formatDate(user.createdAt)}</span>
         </div>
+        <div class="detail-item">
+          <strong>⭐ Điểm đánh giá</strong>
+          <span>${formatRatingDisplay(user.rating, user.ratingCount)}</span>
+        </div>
+        <div class="detail-item">
+          <strong>🧾 Lượt đánh giá</strong>
+          <span>${formatNumber(user.ratingCount)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -232,8 +240,10 @@ function displayUserDetails(userData) {
           </div>
           <div class="detail-item">
             <strong>⭐ Đánh giá</strong>
-            <span style="color: #ffc107; font-weight: bold;">${storeInfo.rating || 0
-      } / 5</span>
+            <span style="color: #ffc107; font-weight: bold;">${formatRatingDisplay(
+      storeInfo.rating,
+      storeInfo.ratingCount
+    )}</span>
           </div>
           <div class="detail-item">
             <strong>✅ Xác minh</strong>
@@ -250,7 +260,155 @@ function displayUserDetails(userData) {
             <strong>📍 Địa chỉ</strong>
             <span>${storeInfo.coords?.address || "Chưa có"}</span>
           </div>
+          <div class="detail-item">
+            <strong>📌 Tọa độ</strong>
+            <span>${formatCoords(storeInfo.coords)}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🕒 Giờ hoạt động</strong>
+            <span>${storeInfo.time || "Chưa cập nhật"}</span>
+          </div>
+          <div class="detail-item">
+            <strong>⚙️ Trạng thái</strong>
+            <span>${storeInfo.isAvailable ? "Đang hoạt động" : "Tạm đóng"}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🚚 Dịch vụ</strong>
+            <span>${[
+        storeInfo.delivery ? "Giao hàng" : null,
+        storeInfo.pickup ? "Nhận tại quán" : null,
+      ]
+        .filter(Boolean)
+        .join(" • ") || "Chưa cấu hình"}</span>
+          </div>
         </div>
+        ${storeInfo.metrics
+        ? `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 18px;">
+          <div style="background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(storeInfo.metrics.totalOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Tổng đơn</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #34d399 0%, #059669 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(storeInfo.metrics.completedOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Đã giao</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(storeInfo.metrics.activeOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Đang xử lý</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #f87171 0%, #ef4444 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(storeInfo.metrics.cancelledOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Đã hủy</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 22px; font-weight: 700;">${formatCurrency(storeInfo.metrics.totalRevenue)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Doanh thu</div>
+          </div>
+        </div>`
+        : "<p style=\"margin-top:12px;color:#6b7280;\">Chưa có thống kê đơn hàng cho cửa hàng này.</p>"}
+      </div>
+    `;
+  }
+
+  if (driverStats) {
+    html += `
+      <div class="detail-section">
+        <h3 style="color: #1d4ed8; border-bottom: 2px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 20px; font-size: 18px;">🚚 Hiệu Suất Tài Xế</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+          <div style="background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(driverStats.totalOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Tổng đơn nhận</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #34d399 0%, #059669 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(driverStats.completedOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Đã giao</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #fbbf24 0%, #f97316 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(driverStats.activeOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Đang giao</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #f87171 0%, #ef4444 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 28px; font-weight: 700;">${formatNumber(driverStats.cancelledOrders)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Bị hủy</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 22px; font-weight: 700;">${formatCurrency(driverStats.totalPayout)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Đã thanh toán</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%); padding: 16px; border-radius: 12px; color: #fff; text-align: center;">
+            <div style="font-size: 22px; font-weight: 700;">${formatCurrency(driverStats.totalCommission)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Hoa hồng</div>
+          </div>
+          <div style="background: linear-gradient(135deg, #fde68a 0%, #f59e0b 100%); padding: 16px; border-radius: 12px; color: #92400e; text-align: center;">
+            <div style="font-size: 24px; font-weight: 700;">${formatRatingDisplay(driverStats.rating, driverStats.ratingCount)}</div>
+            <div style="opacity: 0.85; margin-top: 6px;">Điểm trung bình</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (shipperProfile) {
+    html += `
+      <div class="detail-section">
+        <h3 style="color: #0d9488; border-bottom: 2px solid #0d9488; padding-bottom: 12px; margin-bottom: 20px; font-size: 18px;">🪪 Hồ Sơ Shipper</h3>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <strong>👤 Họ tên</strong>
+            <span>${shipperProfile.fullName}</span>
+          </div>
+          <div class="detail-item">
+            <strong>📱 Số điện thoại</strong>
+            <span>${shipperProfile.phone}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🚗 Loại phương tiện</strong>
+            <span>${formatVehicleType(shipperProfile.vehicleType)}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🆔 Biển số</strong>
+            <span>${shipperProfile.vehiclePlate || "Chưa cập nhật"}</span>
+          </div>
+          <div class="detail-item">
+            <strong>📄 Trạng thái duyệt</strong>
+            <span class="badge ${shipperProfile.approvalStatus === "approved"
+        ? "badge-success"
+        : shipperProfile.approvalStatus === "rejected"
+          ? "badge-danger"
+          : "badge-warning"
+      }">${shipperProfile.approvalStatus.toUpperCase()}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🕒 Cập nhật</strong>
+            <span>${formatDate(shipperProfile.updatedAt)}</span>
+          </div>
+        </div>
+        <div class="detail-grid" style="margin-top: 16px;">
+          <div class="detail-item">
+            <strong>📑 CMND/CCCD</strong>
+            <span>${renderDocumentLink(shipperProfile.idFrontUrl, "Mặt trước")}</span>
+          </div>
+          <div class="detail-item">
+            <strong></strong>
+            <span>${renderDocumentLink(shipperProfile.idBackUrl, "Mặt sau")}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🚘 Bằng lái</strong>
+            <span>${renderDocumentLink(shipperProfile.driverLicenseUrl, "Xem ảnh")}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🧾 Đăng kiểm</strong>
+            <span>${renderDocumentLink(shipperProfile.vehicleRegUrl, "Xem ảnh")}</span>
+          </div>
+          <div class="detail-item">
+            <strong>🤳 Chân dung</strong>
+            <span>${renderDocumentLink(shipperProfile.selfieUrl, "Xem ảnh")}</span>
+          </div>
+        </div>
+        ${shipperProfile.rejectionReason
+        ? `<p style="margin-top:12px;color:#dc2626;"><strong>Lý do từ chối:</strong> ${shipperProfile.rejectionReason}</p>`
+        : ""}
       </div>
     `;
   }
@@ -264,6 +422,45 @@ function formatCurrency(amount) {
     style: "currency",
     currency: "VND",
   }).format(amount);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("vi-VN").format(value || 0);
+}
+
+function formatRatingDisplay(rating, count) {
+  const safeRating = Number(rating || 0).toFixed(1);
+  const safeCount = Number(count || 0);
+  return `${safeRating} / 5 (${safeCount} lượt)`;
+}
+
+function formatVehicleType(type) {
+  switch (type) {
+    case "motorbike":
+      return "Xe máy";
+    case "car":
+      return "Ô tô";
+    case "light_truck":
+      return "Xe tải nhẹ";
+    case "heavy_truck":
+      return "Xe tải nặng";
+    default:
+      return "Khác";
+  }
+}
+
+function renderDocumentLink(url, label) {
+  if (!url) {
+    return `<span style="color:#9ca3af;">${label}: Chưa có</span>`;
+  }
+  return `<a href="${url}" target="_blank" rel="noopener" style="color:#2563eb; font-weight:600;">${label}</a>`;
+}
+
+function formatCoords(coords) {
+  if (!coords || typeof coords.latitude !== "number" || typeof coords.longitude !== "number") {
+    return "Chưa có";
+  }
+  return `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
 }
 
 async function deleteUser(userId) {
