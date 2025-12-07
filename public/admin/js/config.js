@@ -78,3 +78,47 @@ function showNotification(message, type = "success") {
     notification.remove();
   }, 3000);
 }
+
+// Rating helpers reused across admin modules
+function normalizeRatingValue(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+  if (value < 0) return 0;
+  if (value > 5) return 5;
+  return value;
+}
+
+function createStarRating(value) {
+  const normalized = normalizeRatingValue(value);
+  if (normalized === null) {
+    return "";
+  }
+
+  let fullStars = Math.floor(normalized);
+  const fraction = normalized - fullStars;
+  let showHalfStar = false;
+
+  if (fraction >= 0.75) {
+    fullStars = Math.min(5, fullStars + 1);
+  } else if (fraction >= 0.25) {
+    showHalfStar = true;
+  }
+
+  let starsHtml =
+    '<span class="rating-stars" style="display:inline-flex;gap:2px;color:#f7b500;">';
+
+  for (let i = 0; i < 5; i += 1) {
+    if (i < fullStars) {
+      starsHtml += '<i class="fas fa-star"></i>';
+    } else if (showHalfStar) {
+      starsHtml += '<i class="fas fa-star-half-alt"></i>';
+      showHalfStar = false;
+    } else {
+      starsHtml += '<i class="far fa-star"></i>';
+    }
+  }
+
+  starsHtml += "</span>";
+  return starsHtml;
+}

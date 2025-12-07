@@ -4,6 +4,7 @@ const Store = require("../models/Store");
 const Appliances = require("../models/Appliances");
 const Voucher = require("../models/Voucher");
 const ShipperApplication = require("../models/ShipperApplication");
+const Rating = require("../models/Rating");
 
 module.exports = {
   // Tổng quan Dashboard
@@ -288,11 +289,72 @@ module.exports = {
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      const stores = await Store.find(query)
+      let stores = await Store.find(query)
         .populate("owner", "username email phone")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
+
+      if (stores.length) {
+        const storeIds = stores
+          .map((store) => store?._id?.toString())
+          .filter(Boolean);
+
+        if (storeIds.length) {
+          const ratingStats = await Rating.aggregate([
+            {
+              $match: {
+                ratingType: "Store",
+                product: { $in: storeIds },
+              },
+            },
+            {
+              $group: {
+                _id: "$product",
+                averageRating: { $avg: "$rating" },
+                ratingCount: { $sum: 1 },
+              },
+            },
+          ]);
+
+          const ratingMap = ratingStats.reduce((acc, stat) => {
+            acc[stat._id] = {
+              averageRating: Number(
+                Number.isFinite(stat.averageRating)
+                  ? stat.averageRating
+                  : 0
+              ),
+              ratingCount: stat.ratingCount || 0,
+            };
+            return acc;
+          }, {});
+
+          stores = stores.map((store) => {
+            const stat = ratingMap[store._id.toString()];
+            const fallbackRating =
+              typeof store.rating === "number" && !Number.isNaN(store.rating)
+                ? store.rating
+                : 0;
+            const fallbackCount =
+              typeof store.ratingCount === "number" && store.ratingCount >= 0
+                ? store.ratingCount
+                : 0;
+
+            return {
+              ...store,
+              rating:
+                stat && Number.isFinite(stat.averageRating)
+                  ? Number(stat.averageRating)
+                  : fallbackRating,
+              ratingCount:
+                stat && Number.isFinite(stat.ratingCount)
+                  ? stat.ratingCount
+                  : fallbackCount,
+            };
+          });
+        }
+      }
 
       const total = await Store.countDocuments(query);
 
@@ -423,10 +485,74 @@ module.exports = {
         filter.title = { $regex: keyword, $options: "i" };
       }
 
-      const products = await Appliances.find(filter)
+      let products = await Appliances.find(filter)
+        .populate("store", "title logoUrl code")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
+
+      if (products.length) {
+        const productIds = products
+          .map((product) => product?._id?.toString())
+          .filter(Boolean);
+
+        if (productIds.length) {
+          const ratingStats = await Rating.aggregate([
+            {
+              $match: {
+                ratingType: "Appliances",
+                product: { $in: productIds },
+              },
+            },
+            {
+              $group: {
+                _id: "$product",
+                averageRating: { $avg: "$rating" },
+                ratingCount: { $sum: 1 },
+              },
+            },
+          ]);
+
+          const ratingMap = ratingStats.reduce((acc, stat) => {
+            acc[stat._id] = {
+              averageRating: Number(
+                Number.isFinite(stat.averageRating)
+                  ? stat.averageRating
+                  : 0
+              ),
+              ratingCount: stat.ratingCount || 0,
+            };
+            return acc;
+          }, {});
+
+          products = products.map((product) => {
+            const stat = ratingMap[product._id.toString()];
+            const fallbackRating =
+              typeof product.rating === "number" &&
+                !Number.isNaN(product.rating)
+                ? product.rating
+                : 0;
+            const fallbackCount =
+              typeof product.ratingCount === "number" &&
+                product.ratingCount >= 0
+                ? product.ratingCount
+                : 0;
+
+            return {
+              ...product,
+              rating:
+                stat && Number.isFinite(stat.averageRating)
+                  ? Number(stat.averageRating)
+                  : fallbackRating,
+              ratingCount:
+                stat && Number.isFinite(stat.ratingCount)
+                  ? stat.ratingCount
+                  : fallbackCount,
+            };
+          });
+        }
+      }
 
       const total = await Appliances.countDocuments(filter);
 

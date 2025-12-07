@@ -57,6 +57,9 @@
         <a href="#" class="nav-item" data-page="vouchers">
           <i class="fas fa-ticket-alt"></i> Quản Lý Mã Giảm Giá
         </a>
+        <a href="#" class="nav-item" data-page="banners">
+          <i class="fas fa-images"></i> Quản Lý Banner
+        </a>
         <a href="#" class="nav-item" onclick="logout()">
           <i class="fas fa-sign-out-alt"></i> Đăng Xuất
         </a>
@@ -390,6 +393,53 @@
           </div>
           <div class="pagination" id="vouchers-pagination"></div>
         </div>
+
+        <!-- Banners Page -->
+        <div id="banners-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Banner Trang Chủ</h2>
+            <div class="filters">
+              <input
+                type="text"
+                id="banner-search"
+                placeholder="Tìm theo tiêu đề hoặc mô tả..."
+              />
+              <select id="banner-status-filter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="active">Đang hiển thị</option>
+                <option value="inactive">Đang ẩn</option>
+              </select>
+              <button class="btn btn-primary" id="banner-create-btn">
+                <i class="fas fa-plus"></i> Thêm banner
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="banners-table">
+              <thead>
+                <tr>
+                  <th>Thứ tự</th>
+                  <th>Banner</th>
+                  <th>CTA</th>
+                  <th>Điểm đến</th>
+                  <th>Trạng thái</th>
+                  <th>Lịch hiển thị</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="banners-tbody"></tbody>
+            </table>
+          </div>
+          <div class="table-actions">
+            <button class="btn btn-secondary" id="banner-refresh-btn">
+              <i class="fas fa-sync-alt"></i> Tải lại
+            </button>
+            <button class="btn btn-success" id="banner-save-order-btn">
+              <i class="fas fa-save"></i> Lưu thứ tự
+            </button>
+          </div>
+          <div class="pagination" id="banners-pagination"></div>
+        </div>
       </div>
     </div>
 
@@ -527,6 +577,183 @@
         </form>
       </div>
     </div>
+
+    <!-- Modal quản lý banner -->
+    <div id="bannerModal" class="modal">
+      <div class="modal-content" style="max-width: 720px">
+        <span class="close">&times;</span>
+        <h2 id="banner-modal-title">Thêm banner mới</h2>
+        <form id="banner-form">
+          <input type="hidden" id="banner-id" />
+
+          <div class="form-group">
+            <label>Tiêu đề <span style="color: red">*</span></label>
+            <input type="text" id="banner-title" required />
+          </div>
+
+          <div class="form-group">
+            <label>Phụ đề</label>
+            <input type="text" id="banner-subtitle" />
+          </div>
+
+          <div class="form-group">
+            <label>Mô tả ngắn</label>
+            <textarea id="banner-description" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>CTA / nút kêu gọi</label>
+            <input type="text" id="banner-cta" placeholder="VD: Mua ngay" />
+          </div>
+
+          <div class="form-group">
+            <label>Danh mục mục tiêu</label>
+            <input
+              type="text"
+              id="banner-category"
+              placeholder="Tên danh mục chính xác để mở AllProducts"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Đường dẫn tuỳ chỉnh</label>
+            <input
+              type="url"
+              id="banner-redirect"
+              placeholder="https://..."
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Bắt đầu hiển thị</label>
+              <input type="datetime-local" id="banner-start" />
+            </div>
+            <div class="form-group">
+              <label>Kết thúc hiển thị</label>
+              <input type="datetime-local" id="banner-end" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Hình ảnh banner <span style="color: red">*</span></label>
+            <input type="hidden" id="banner-image-url" required />
+            <div class="banner-image-field">
+              <img
+                id="banner-preview"
+                src=""
+                alt="Banner preview"
+                class="banner-preview"
+              />
+              <div class="banner-upload-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  id="banner-select-image"
+                >
+                  <i class="fas fa-upload"></i> Chọn ảnh
+                </button>
+                <small>Ảnh đề xuất 1200x400px. Dung lượng &lt; 2MB.</small>
+              </div>
+              <input
+                type="file"
+                id="banner-file-input"
+                accept="image/*"
+                style="display: none"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="banner-active" checked />
+              Hiển thị ngay
+            </label>
+          </div>
+
+          <div class="banner-detail-section banner-form-products-section">
+            <div class="section-heading">
+              <h3>Sản phẩm nằm trên banner</h3>
+              <span class="form-helper">Tối đa 10 sản phẩm hiển thị cùng banner</span>
+            </div>
+            <div id="banner-form-products" class="banner-products-list empty-state">
+              <i class="fas fa-box-open"></i>
+              <p>Chưa chọn sản phẩm cho banner này</p>
+            </div>
+
+            <div class="banner-detail-section banner-form-search">
+              <h4>Thêm sản phẩm trong kho</h4>
+              <div class="banner-search-field">
+                <input
+                  type="text"
+                  id="banner-form-product-search"
+                  placeholder="Nhập tên sản phẩm để tìm..."
+                />
+                <small>Gõ từ khóa (≥ 2 ký tự) để tìm kiếm và thêm sản phẩm.</small>
+              </div>
+              <div id="banner-form-product-results" class="banner-search-results">
+                <p class="search-placeholder">Nhập từ khóa để bắt đầu tìm kiếm</p>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block">
+            Lưu banner
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div id="bannerDetailModal" class="modal">
+      <div class="modal-content banner-detail-modal">
+        <span class="close">&times;</span>
+        <div class="banner-detail-body">
+          <div class="banner-detail-header">
+            <img
+              id="banner-detail-image"
+              src="https://via.placeholder.com/600x200?text=Banner"
+              alt="Banner preview"
+            />
+            <div class="banner-detail-info">
+              <h2 id="banner-detail-title">Banner</h2>
+              <p id="banner-detail-description">Chi tiết banner sẽ hiển thị tại đây.</p>
+              <div class="banner-detail-meta">
+                <span id="banner-detail-status" class="status-pill status-warning">Đang tải</span>
+                <span id="banner-detail-schedule" class="meta-chip">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="banner-detail-section">
+            <div class="section-heading">
+              <h3>Sản phẩm đang hiển thị</h3>
+              <button class="btn btn-primary" id="banner-detail-save-btn">
+                <i class="fas fa-save"></i> Lưu danh sách sản phẩm
+              </button>
+            </div>
+            <div id="banner-linked-products" class="banner-products-list empty-state">
+              <i class="fas fa-box-open"></i>
+              <p>Chưa chọn sản phẩm cho banner này</p>
+            </div>
+          </div>
+
+          <div class="banner-detail-section">
+            <h3>Thêm sản phẩm vào banner</h3>
+            <div class="banner-search-field">
+              <input
+                type="text"
+                id="banner-product-search"
+                placeholder="Nhập tên sản phẩm..."
+              />
+              <small>Gõ ≥ 2 ký tự để tìm sản phẩm trong kho.</small>
+            </div>
+            <div id="banner-product-results" class="banner-search-results">
+              <p class="search-placeholder">Nhập từ khóa để bắt đầu tìm kiếm</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- Modal for Feedback Response -->
     <div id="feedbackModal" class="modal">
       <div class="modal-content">
@@ -624,6 +851,7 @@
     <script src="js/feedback.js"></script>
     <script src="js/vouchers.js"></script>
     <script src="js/shippers.js"></script>
+    <script src="js/banners.js"></script>
     <script src="js/main.js"></script>
   </body>
 </html>

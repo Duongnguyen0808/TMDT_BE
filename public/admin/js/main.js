@@ -74,5 +74,8 @@ function loadPageData(page) {
     case "vouchers":
       loadVouchers(1);
       break;
+    case "banners":
+      loadBanners(1);
+      break;
   }
 }

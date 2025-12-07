@@ -2,6 +2,65 @@
 let currentProductsPage = 1;
 const productsPerPage = 20;
 
+function getNormalizedProductRating(value) {
+  if (typeof window.normalizeRatingValue === "function") {
+    return window.normalizeRatingValue(value);
+  }
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+  if (value < 0) return 0;
+  if (value > 5) return 5;
+  return value;
+}
+
+function getProductStarMarkup(value) {
+  if (typeof window.createStarRating === "function") {
+    return window.createStarRating(value);
+  }
+  const normalized = getNormalizedProductRating(value);
+  if (normalized === null) {
+    return "";
+  }
+  return `<span>&#9733; ${normalized.toFixed(1)}</span>`;
+}
+
+function renderProductRating(rating, ratingCount) {
+  const normalized = getNormalizedProductRating(rating);
+  const totalRatings =
+    typeof ratingCount === "number" && ratingCount >= 0 ? ratingCount : 0;
+
+  if (normalized === null || totalRatings === 0) {
+    return '<div style="width:100%;color:#9e9e9e;font-style:italic;margin-top:6px;">Chưa có đánh giá</div>';
+  }
+
+  return `
+    <div style="display:flex;align-items:center;gap:6px;">
+      ${getProductStarMarkup(normalized)}
+      <div>
+        <strong>${normalized.toFixed(1)}</strong>
+        <small style="color:#666;">(${totalRatings})</small>
+      </div>
+    </div>
+  `;
+}
+
+function renderProductStoreInfo(product) {
+  const storeName =
+    product && product.store && product.store.title
+      ? product.store.title
+      : "Không xác định";
+  const storeCode =
+    product && product.store && product.store.code ? product.store.code : "--";
+
+  return `
+    <p style="color:#444;font-size:13px;margin:2px 0;">
+      Cửa hàng: <strong>${storeName}</strong>
+      <span style="color:#999;">(${storeCode})</span>
+    </p>
+  `;
+}
+
 async function loadProducts(page = 1) {
   const search = document.getElementById("product-search").value;
 
@@ -30,15 +89,14 @@ function renderProductsGrid(products) {
             <img src="${product.imageUrl[0]}" alt="${product.title}">
             <div class="product-card-body">
                 <h4>${product.title}</h4>
-                <p style="color: #666; font-size: 14px; margin: 5px 0;">${product.category || "Chưa cập nhật"
-        }</p>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                    <span class="product-price">${formatCurrency(
-          product.price
-        )}</span>
-                    <span style="color: #FF9800;">⭐ ${product.rating.toFixed(
-          1
-        )}</span>
+                <p style="color: #666; font-size: 14px; margin: 5px 0;">${product.category || "Chưa cập nhật"}</p>
+                ${renderProductStoreInfo(product)}
+                <div style="color:#666;font-size:13px;margin:2px 0;">
+                    Đã bán: ${typeof product.soldCount === "number" ? product.soldCount : 0}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 12px; flex-wrap: wrap;">
+                    <span class="product-price">${formatCurrency(product.price)}</span>
+                    ${renderProductRating(product.rating, product.ratingCount)}
                 </div>
                 <div style="margin-top: 10px;">
                     ${(typeof product.stock === 'number' ? product.stock > 0 : true) && product.isAvailable

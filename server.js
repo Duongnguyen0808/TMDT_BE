@@ -34,6 +34,7 @@ const VendorWalletRoute = require("./routes/vendorWallet");
 const ServiceTicketRoute = require("./routes/serviceTicket");
 const RecommendationRoute = require("./routes/recommendation");
 const AnalyticsRoute = require("./routes/analytics");
+const BannerRoute = require("./routes/banner");
 const startDeliveryWatchdog = require("./watchdogs/deliveryWatchdog");
 // const PromotionRoute = require("./routes/promotion");
 // Test FCM route (added for debugging) after dotenv loaded
@@ -142,6 +143,7 @@ app.use("/api/vendor-wallet", VendorWalletRoute);
 app.use("/api/service-center", ServiceTicketRoute);
 app.use("/api/recommendations", RecommendationRoute);
 app.use("/api/analytics", AnalyticsRoute);
+app.use("/api/banners", BannerRoute);
 // app.use("/api/promotions", PromotionRoute);
 
 // Simple FCM test endpoint
