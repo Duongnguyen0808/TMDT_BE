@@ -7,8 +7,10 @@ const {
 } = require("../utils/driverWallet");
 const { buildVnpParams, createPaymentUrl } = require("../utils/vnpay");
 
+// Hạn chế số tiền nạp nhỏ để giảm phí giao dịch
 const MIN_TOPUP_AMOUNT = Number(process.env.DRIVER_TOPUP_MIN || 50000);
 
+// Chặn mọi request không phải tài xế dùng ví này
 function ensureDriver(req, res) {
     if (!req.user || req.user.userType !== "Driver") {
         res.status(403).json({ status: false, message: "Chỉ tài xế mới sử dụng ví" });
@@ -55,6 +57,7 @@ module.exports = {
                 ""
             ).toString();
 
+            // Lưu lịch sử yêu cầu trước khi chuyển qua VNPay
             const topup = new DriverWalletTopup({
                 driver: req.user.id,
                 amount: numericAmount,

@@ -4,6 +4,7 @@ const { GoogleAuth, JWT } = require('google-auth-library');
 const User = require('../models/User');
 
 // Multi-project registry { projectId: firebaseAdminApp }
+// Cho phép mỗi user gắn với project riêng (driver app, vendor app) nhưng vẫn dùng chung backend
 const appRegistry = {};
 
 function initServiceAccount(jsonStr) {
@@ -215,6 +216,7 @@ const sendPushNotification = async (fcmToken, title, body, data = {}) => {
     }
 
     if (CAN_USE_ADMIN) {
+      // Ưu tiên gửi bằng Firebase Admin với project tương ứng token để tránh lỗi SenderId mismatch
       // Determine project by looking up user
       let projectIdForToken = null;
       try {

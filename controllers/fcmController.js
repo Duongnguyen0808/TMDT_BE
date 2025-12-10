@@ -13,10 +13,12 @@ exports.registerToken = async (req, res) => {
         if (!isValidFcmToken(token)) return res.status(400).json({ success: false, message: 'Token không hợp lệ' });
         if (!userId && !email) return res.status(400).json({ success: false, message: 'Cần userId hoặc email' });
 
+        // Cho phép lookup theo userId hoặc email để phục vụ app public lẫn dashboard
         const query = userId ? { _id: userId } : { email };
         const user = await User.findOne(query);
         if (!user) return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
 
+        // Một user chỉ giữ một token cuối cùng, nên ghi đè trực tiếp để tránh gửi nhầm
         user.fcm = token;
         if (projectId) user.fcmProject = projectId; // lưu projectId client gửi lên
         await user.save();
@@ -39,6 +41,7 @@ exports.deleteToken = async (req, res) => {
         const query = userId ? { _id: userId } : { email };
         const user = await User.findOne(query);
         if (!user) return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+        // Reset token về 'none' để các job gửi thông báo bỏ qua user này
         user.fcm = 'none';
         user.fcmProject = '';
         await user.save();

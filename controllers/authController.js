@@ -1,12 +1,13 @@
 const User = require("../models/User");
-const CryptoJS = require("crypto-js");
 const jwt = require("jsonwebtoken");
+const passwordService = require("../utils/passwordService");
 const generateOtp = require("../utils/otp_generator");
 const sendMail = require("../utils/smtp_function");
 const sendSmsOtp = require("../utils/sms_function");
 
 module.exports = {
   createUser: async (req, res) => {
+    // Đảm bảo email đúng định dạng cơ bản trước khi tạo user
     const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/;
 
     if (!emailRegex.test(req.body.email)) {
@@ -25,6 +26,7 @@ module.exports = {
     }
 
     try {
+      // Ngăn đăng ký trùng email
       const emailExists = await User.findOne({ email: req.body.email });
 
       if (emailExists) {
@@ -33,26 +35,29 @@ module.exports = {
           .json({ status: false, message: res.__("auth.email_exists") });
       }
 
-      // GENERATE OTP
+      // Tạo OTP để gửi email xác minh, đồng thời set expireAt để xoá user nếu không verify
       const otp = generateOtp();
+
+      const hashedPassword = await passwordService.hashPassword(
+        req.body.password
+      );
 
       const newUser = new User({
         username: req.body.username,
         email: req.body.email,
         userType: "Client",
-        password: CryptoJS.AES.encrypt(
-          req.body.password,
-          process.env.SECRET
-        ).toString(),
+        password: hashedPassword,
+        passwordVersion: 2,
+        passwordMigratedAt: new Date(),
         otp: otp,
         // auto-delete after 10 minutes if not verified
         expireAt: new Date(Date.now() + 10 * 60 * 1000),
       });
 
-      // SAVE USER
+      // Lưu tạm user chưa verify vào DB
       await newUser.save();
 
-      // SEND OTP TO EMAIL
+      // Gửi OTP qua SMTP nội bộ, client sẽ nhập lại để kích hoạt
       sendMail(newUser.email, otp);
 
       res
@@ -65,10 +70,13 @@ module.exports = {
 
   // Tạo tài khoản Admin (chỉ dùng lần đầu)
   createAdmin: async (req, res) => {
+    const hashedPassword = await passwordService.hashPassword("admin123");
     const newUser = new User({
       username: "Admin",
       email: "admin@tmdt.com",
-      password: CryptoJS.AES.encrypt("admin123", process.env.SECRET).toString(),
+      password: hashedPassword,
+      passwordVersion: 2,
+      passwordMigratedAt: new Date(),
       userType: "Admin",
       verification: true,
       phoneVerification: true,
@@ -91,6 +99,7 @@ module.exports = {
 
   loginUser: async (req, res) => {
     try {
+      // Chuẩn hoá email để tránh trùng giữa hoa/thường
       const emailRaw = String(req.body.email || '').trim().toLowerCase();
       const passwordRaw = String(req.body.password || '');
       const fcmToken = req.body.fcmToken;
@@ -110,24 +119,17 @@ module.exports = {
         return res.status(400).json({ status: false, code: 'USER_NOT_FOUND', message: 'Không tìm thấy tài khoản' });
       }
 
-      // Giải mã mật khẩu lưu trữ
-      let depassword;
-      try {
-        depassword = CryptoJS.AES.decrypt(user.password, process.env.SECRET).toString(CryptoJS.enc.Utf8);
-      } catch (e) {
-        return res.status(500).json({ status: false, code: 'DECRYPT_ERROR', message: 'Không giải mã được mật khẩu' });
-      }
-
-      if (depassword !== passwordRaw) {
+      const passwordMatches = await passwordService.verifyUserPassword(user, passwordRaw);
+      if (!passwordMatches) {
         return res.status(400).json({ status: false, code: 'WRONG_PASSWORD', message: 'Sai mật khẩu' });
       }
 
-      // Nếu tài khoản chưa xác minh email hoặc phone có thể cảnh báo (không chặn login nếu là Driver)
+      // Không chặn đăng nhập nếu chưa verify để họ có thể tiếp tục nhận OTP bên trong app
       if (!user.verification && user.userType !== 'Driver') {
         // Có thể yêu cầu xác minh nhưng vẫn cho login để họ hoàn tất OTP
       }
 
-      // Cập nhật FCM token nếu gửi kèm
+      // Lưu token FCM mới nhất để backend có thể push thông báo chính xác cho thiết bị
       if (fcmToken && typeof fcmToken === 'string' && fcmToken.length > 20) {
         try { await User.findByIdAndUpdate(user._id, { fcm: fcmToken }); } catch (_) { }
       }
@@ -137,6 +139,7 @@ module.exports = {
         return res.status(500).json({ status: false, code: 'JWT_SECRET_MISSING', message: 'Thiếu JWT_SECRET trên server' });
       }
 
+      // JWT chứa id + userType để client gửi kèm trong header cho các API yêu cầu quyền
       const userToken = jwt.sign({ id: user._id, userType: user.userType, email: user.email }, jwtSecret, { expiresIn: '21d' });
       const { password, createdAt, updatedAt, __v, otp, ...others } = user._doc;
       return res.status(200).json({ status: true, code: 'LOGIN_OK', data: others, userToken });
@@ -176,6 +179,7 @@ module.exports = {
       await user.save();
 
       if (email) {
+        // Ưu tiên gửi email nếu cung cấp email
         await sendMail(user.email, otp);
       } else if (phone) {
         // chuẩn hoá +84
@@ -247,11 +251,9 @@ module.exports = {
           .json({ status: false, message: "OTP không chính xác" });
       }
 
-      // Update password
-      user.password = CryptoJS.AES.encrypt(
-        newPassword,
-        process.env.SECRET
-      ).toString();
+      user.password = await passwordService.hashPassword(newPassword);
+      user.passwordVersion = 2;
+      user.passwordMigratedAt = new Date();
       user.resetPasswordOTP = undefined;
       user.resetPasswordExpires = undefined;
       await user.save();
@@ -290,19 +292,21 @@ module.exports = {
           .json({ status: false, message: "Không tìm thấy người dùng" });
       }
 
-      const decrypted = CryptoJS.AES.decrypt(user.password, process.env.SECRET);
-      const currentPassword = decrypted.toString(CryptoJS.enc.Utf8);
+      const currentPasswordOk = await passwordService.verifyUserPassword(
+        user,
+        oldPassword,
+        { upgradeOnMatch: false }
+      );
 
-      if (currentPassword !== oldPassword) {
+      if (!currentPasswordOk) {
         return res
           .status(400)
           .json({ status: false, message: "Mật khẩu hiện tại không đúng" });
       }
 
-      user.password = CryptoJS.AES.encrypt(
-        newPassword,
-        process.env.SECRET
-      ).toString();
+      user.password = await passwordService.hashPassword(newPassword);
+      user.passwordVersion = 2;
+      user.passwordMigratedAt = new Date();
       await user.save();
 
       return res
@@ -325,7 +329,7 @@ module.exports = {
     }
 
     try {
-      // Kiểm tra số điện thoại đã được sử dụng chưa
+      // Không cho phép hai tài khoản cùng xác minh chung một số
       const phoneExists = await User.findOne({
         phone: phone,
         phoneVerification: true,
@@ -341,7 +345,7 @@ module.exports = {
       // Tạo OTP
       const otp = generateOtp();
 
-      // Cập nhật OTP và số điện thoại
+      // Lưu OTP cùng số vừa nhập để verify ở bước sau
       await User.findByIdAndUpdate(userId, {
         phone: phone,
         otp: otp,
@@ -393,7 +397,7 @@ module.exports = {
           .json({ status: false, message: "OTP không chính xác" });
       }
 
-      // Xác minh thành công
+      // Đặt cờ phoneVerification để tránh phải verify lại
       user.phoneVerification = true;
       user.otp = "none";
       await user.save();

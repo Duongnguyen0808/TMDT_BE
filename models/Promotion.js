@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Schema cũ phục vụ broadcast notification thủ công
 const PromotionSchema = new mongoose.Schema({
     title: { type: String, required: true },
     body: { type: String, required: true },

@@ -1,7 +1,9 @@
 const { getOrCreateWallet, creditVendorWallet, debitVendorWallet } = require("../utils/vendorWallet");
 
+// Giới hạn tối thiểu cho thao tác nạp/rút thủ công để tránh giao dịch lẻ
 const MIN_VENDOR_ADJUST = Number(process.env.VENDOR_WALLET_MIN || 10000);
 
+// Chuẩn hoá payload trả về để FE tái sử dụng giữa summary/transactions
 function mapWalletResponse(ctx, { limitTransactions = 20 } = {}) {
     const wallet = ctx.wallet;
     const store = ctx.store;
@@ -47,6 +49,7 @@ function handleError(res, error) {
 module.exports = {
     summary: async (req, res) => {
         try {
+            // getOrCreateWallet tự gắn store mặc định rồi trả về balance hiện tại
             const ctx = await getOrCreateWallet(req.user.id);
             return res.status(200).json({ status: true, data: mapWalletResponse(ctx) });
         } catch (error) {

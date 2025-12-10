@@ -1,6 +1,8 @@
 const User = require("../models/User");
 const ShipperApplication = require("../models/ShipperApplication");
+const passwordService = require("../utils/passwordService");
 
+// Các trường bắt buộc trong hồ sơ shipper
 const requiredFields = [
     "fullName",
     "phone",
@@ -37,6 +39,7 @@ module.exports = {
                 recaptchaToken,
             } = req.body;
 
+            // Gom các trường thiếu để trả về một lần thay vì báo từng trường
             const missing = [];
             const requiredUserFields = ["email", "password", "fullName", "phone"];
             for (const f of requiredUserFields)
@@ -118,11 +121,13 @@ module.exports = {
             if (existUser)
                 return logAndSend(res, 400, "EMAIL_EXISTS", "Email đã được sử dụng");
 
-            const CryptoJS = require("crypto-js");
+            const hashedPassword = await passwordService.hashPassword(password);
             const newUser = new User({
                 username: fullName,
                 email: String(email).toLowerCase(),
-                password: CryptoJS.AES.encrypt(password, process.env.SECRET).toString(),
+                password: hashedPassword,
+                passwordVersion: 2,
+                passwordMigratedAt: new Date(),
                 phone,
                 userType: "Client",
                 verification: true,
@@ -313,6 +318,7 @@ module.exports = {
             app.reviewedBy = adminId;
             app.reviewedAt = new Date();
             await app.save();
+            // Sau khi duyệt, user sẽ chuyển sang role Driver để đăng nhập bằng app tài xế
             await User.findByIdAndUpdate(app.user, { userType: "Driver" });
             return res
                 .status(200)

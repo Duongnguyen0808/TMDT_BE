@@ -22,6 +22,7 @@ module.exports = {
         .json({ status: false, message: "Bạn có một trường bị thiếu" });
     }
     try {
+      // Lưu nguyên request body vì schema đã kiểm soát trường
       const newStore = new Store(req.body);
       await newStore.save();
 
@@ -80,6 +81,7 @@ module.exports = {
         ]);
       }
 
+      // Nếu không tìm được theo mã, fallback sang danh sách chung
       if (randomStore.length === 0) {
         randomStore = await Store.aggregate([
           { $match: { isAvailable: true } },

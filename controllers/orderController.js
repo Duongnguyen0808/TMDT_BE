@@ -24,12 +24,12 @@ const {
 const { requestVnpayRefund } = require("../utils/vnpay");
 const { settleDriverDeliveryPayout } = require("../utils/driverPayout");
 
-// Proposal flow disabled: expose all available orders to all shippers
+// Luồng đề xuất tài xế đã tắt: mọi đơn sẵn sàng sẽ hiển thị cho tất cả shipper
 async function _startDriverProposal(_order) {
-  return; // no-op
+  return; // không thực hiện hành động nào
 }
 
-// Helper: rotate to next driver (called on decline or timeout)
+// Hàm phụ: chuyển lượt cho tài xế kế tiếp khi từ chối hoặc hết hạn
 async function _rotateDriverProposal(_order) { return; }
 
 const PICKUP_CODE_TTL_MS = 2 * 60 * 60 * 1000; // 2h
@@ -45,6 +45,7 @@ const EARTH_RADIUS_KM = 6371;
 const generatePickupCode = () =>
   (Math.floor(100000 + Math.random() * 900000)).toString();
 
+// Chuẩn hoá dữ liệu toạ độ từ nhiều cấu trúc khác nhau, trả về [lat, lng] hợp lệ
 const normalizeCoords = (coords) => {
   if (!coords) return null;
   if (Array.isArray(coords) && coords.length >= 2) {
@@ -61,6 +62,7 @@ const normalizeCoords = (coords) => {
   return null;
 };
 
+// Tính khoảng cách đường chim bay giữa hai điểm bằng công thức Haversine
 const haversineDistanceKm = (fromCoords, toCoords) => {
   if (!fromCoords || !toCoords) return null;
   const [lat1, lng1] = fromCoords;
@@ -81,6 +83,7 @@ const toPositiveNumber = (value) => {
   return Number.isFinite(num) && num > 0 ? num : null;
 };
 
+// Quy đổi khoảng cách thành phí giao hàng, áp dụng chặn min/max và làm tròn cấu hình
 const deliveryFeeFromDistance = (distanceKm) => {
   if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
     return DELIVERY_BASE_FEE;
@@ -101,6 +104,7 @@ const deliveryFeeFromDistance = (distanceKm) => {
   return Math.max(DELIVERY_BASE_FEE, Math.round(cappedFee));
 };
 
+// API cũ: chỉ trả về phí dựa trên khoảng cách giữa cửa hàng và người nhận
 const calculateDeliveryFee = (
   storeCoords,
   recipientCoords,
@@ -112,6 +116,7 @@ const calculateDeliveryFee = (
   return deliveryFeeFromDistance(distance);
 };
 
+// API mới: trả về cả phí, quãng đường chuẩn hoá và vị trí để client hiển thị chi tiết
 const computeDeliveryQuote = (
   storeCoords,
   recipientCoords,
@@ -137,6 +142,7 @@ const computeDeliveryQuote = (
   };
 };
 
+// Lấy thông tin chủ cửa hàng (vendor) từ document hoặc from DB nếu chưa populate
 const resolveStoreOwner = async (storeRef) => {
   if (!storeRef) return null;
   const raw = typeof storeRef.toObject === "function" ? storeRef.toObject() : storeRef;
@@ -155,6 +161,7 @@ const resolveStoreOwner = async (storeRef) => {
   }
 };
 
+// Tìm ra user account (để gửi thông báo) tương ứng với chủ cửa hàng
 const findVendorUser = async (storeRef) => {
   const info = await resolveStoreOwner(storeRef);
   if (!info) return { user: null, storeTitle: "" };
@@ -168,6 +175,7 @@ const findVendorUser = async (storeRef) => {
   }
 };
 
+// Lấy thông tin user của tài xế dùng cho thông báo real-time
 const findDriverUser = async (driverId) => {
   if (!driverId) return null;
   try {
@@ -177,6 +185,7 @@ const findDriverUser = async (driverId) => {
   }
 };
 
+// Các api cũ mới dùng nhiều tên trường khác nhau: gom về một hàm tra cứu duy nhất
 const resolveProofPhoto = (payload = {}) => {
   return (
     payload.deliveryProofPhoto ||
@@ -283,6 +292,7 @@ const formatDeliveryAddress = (addressDoc) => {
   };
 };
 
+// Suy ra timestamp cho từng mốc logistics dựa trên dữ liệu đơn + shipment timeline
 const resolveStageTimestamp = (stageKey, orderDoc, shipmentDoc) => {
   const timeline = shipmentDoc?.timeline || {};
   switch (stageKey) {
@@ -309,6 +319,7 @@ const resolveStageTimestamp = (stageKey, orderDoc, shipmentDoc) => {
   }
 };
 
+// Gộp lộ trình kho, hub và trạng thái để phía mobile hiển thị dạng tiến trình
 const buildLogisticsTimeline = (orderDoc, shipmentDoc) => {
   const timeline = LOGISTICS_STAGE_FLOW.map((stage) => {
     const timestamp = resolveStageTimestamp(stage.key, orderDoc, shipmentDoc);
@@ -361,6 +372,7 @@ const buildLogisticsTimeline = (orderDoc, shipmentDoc) => {
   return timeline;
 };
 
+// Phát sự kiện socket để dashboard/ứng dụng đồng bộ trạng thái logistics theo thời gian thực
 const emitOrderLogistics = (req, orderId, logisticStatus, extra = {}) => {
   try {
     const io = req.app.get("io");
@@ -376,6 +388,7 @@ const emitOrderLogistics = (req, orderId, logisticStatus, extra = {}) => {
   }
 };
 
+// Kiểm tra vendor hiện tại có quyền thao tác với đơn không (tránh sửa nhầm cửa hàng khác)
 const canVendorManageOrder = (orderDoc, user) => {
   if (!orderDoc || !user) return false;
   if (user.userType === "Admin") return true;
@@ -400,6 +413,7 @@ module.exports = {
     session.startTransaction();
 
     try {
+      // 1) Chuẩn hoá phí giao hàng dựa trên toạ độ để tránh client tự ý gửi số tiền thấp
       const newOrder = new Order(req.body);
       const clientDistanceOverride = toPositiveNumber(
         req.body?.deliveryDistanceKm ??
@@ -444,7 +458,7 @@ module.exports = {
         phoneWarning = res.__("order.phone_not_verified_warning");
       }
 
-      // Kiểm tra tính khả dụng & tồn kho
+      // 2) Đảm bảo từng sản phẩm còn tồn kho và đang mở bán trước khi trừ
       for (const item of newOrder.orderItems) {
         const product = await Appliances.findById(item.appliancesId).session(
           session
@@ -483,7 +497,7 @@ module.exports = {
       await newOrder.save({ session });
       const orderId = newOrder._id;
 
-      // Gán logistics hubs đơn giản (nearest central then nearest local)
+      // 3) Tự động gán kho trung tâm/kho địa phương gần nhất để hiển thị tiến trình giao nhận
       try {
         const hubs = await Hub.find({ active: true }).session(session);
         // Separate central and local
@@ -517,7 +531,7 @@ module.exports = {
         }
       } catch (e) { }
 
-      // Cập nhật tồn kho và số lượng đã bán
+      // 4) Trừ tồn + cộng soldCount sau khi xác nhận nằm trong transaction
       for (const item of newOrder.orderItems) {
         await Appliances.findByIdAndUpdate(
           item.appliancesId,
@@ -531,7 +545,7 @@ module.exports = {
         );
       }
 
-      // Clear cart items for this order
+      // 5) Xoá các item đã mua khỏi giỏ để tránh hiển thị trùng
       const appliancesIds = newOrder.orderItems.map(
         (item) => item.appliancesId
       );
@@ -543,7 +557,7 @@ module.exports = {
         { session }
       );
 
-      // Update voucher usage if promoCode exists
+      // 6) Ghi nhận voucher đã dùng + đánh dấu claim của user
       if (newOrder.promoCode) {
         const code = String(newOrder.promoCode).toUpperCase();
         const voucher = await Voucher.findOneAndUpdate(
@@ -577,7 +591,7 @@ module.exports = {
         response.requirePhoneVerification = false; // Không bắt buộc, chỉ khuyến khích
       }
 
-      // Gửi thông báo đơn hàng mới (nếu có fcm token)
+      // 7) Báo cho khách & vendor biết có đơn mới (tối ưu trải nghiệm realtime)
       try {
         if (user && user.fcm && user.fcm !== 'none') {
           await sendOrderPlacedNotification(user.fcm, orderId, newOrder.grandTotal || newOrder.orderTotal || 0);
@@ -650,8 +664,7 @@ module.exports = {
 
     try {
       const baseQuery = { storeId: id, orderStatus: status };
-      // Mặc định trước đây lọc paymentStatus=Completed khiến Vendor không thấy đơn Pending mới.
-      // Giờ nếu không yêu cầu all thì vẫn giữ Completed, còn ?all=1 sẽ trả tất cả.
+      // Nếu không truyền all thì vẫn ưu tiên những đơn đã thanh toán xong để dễ soát tiền
       if (
         orderStatus === "Delivered" &&
         (userType === "Vendor" || userType === "Admin") &&
@@ -1141,6 +1154,7 @@ module.exports = {
         return res.status(400).json({ status: false, message: "Đơn chưa ở trạng thái cho phép hoàn tất" });
       }
 
+      // Cho phép shipper bổ sung ảnh mà không reset trạng thái nếu shop đã xác nhận
       const isSupplement = Boolean(
         supplementOnly || supplemental || appendOnly || req.body?.additionalProof
       );
@@ -1172,6 +1186,7 @@ module.exports = {
         .filter((url) => typeof url === "string" && url.trim().length > 0)
         .slice(-6);
 
+      // Nếu shop chưa xác nhận hoặc yêu cầu rà soát lại thì reset toàn bộ dấu vết confirm
       if (!shouldKeepConfirmation) {
         order.shopDeliveryConfirmStatus = "Pending";
         order.shopDeliveryConfirmedAt = null;
@@ -1377,7 +1392,7 @@ module.exports = {
         return res.status(200).json({ status: true, message: "Đã xác nhận khách đã nhận hàng" });
       }
 
-      // Reject proof
+      // Nếu shop phát hiện giao sai => chuyển về trạng thái Escalated để shipper bổ sung
       order.shopDeliveryConfirmStatus = "Rejected";
       order.shopDeliveryRejectReason = note || "Shop từ chối bằng chứng giao hàng";
       order.shopDeliveryRejectedAt = new Date();
@@ -1450,6 +1465,7 @@ module.exports = {
         return res.status(400).json({ status: false, message: "Đơn chưa có bằng chứng giao hàng để khiếu nại" });
       }
 
+      // Khách hàng chỉ có thể mở khiếu nại sau khi shipper upload proof
       order.customerDisputeStatus = "Pending";
       order.customerDisputeNote = (note || reason || "Khách báo chưa nhận hàng").trim();
       order.customerDisputeAt = new Date();
@@ -1631,6 +1647,7 @@ module.exports = {
     try {
       session.startTransaction();
 
+      // Khi huỷ phải hoàn kho, hoàn voucher, giải phóng shipper và hoàn tiền nếu đã thanh toán
       const order = await Order.findById(orderId)
         .populate({ path: "userId", select: "fcm" })
         .session(session);
@@ -2067,6 +2084,7 @@ module.exports = {
         .lean();
 
       const orderPayload = order.toObject({ virtuals: false, getters: false });
+      // Chuẩn hoá dữ liệu trả về cho mobile/web theo cùng cấu trúc timeline
       const timeline = buildLogisticsTimeline(orderPayload, shipmentDoc);
       const progressStages = timeline.filter((stage) => stage.key !== "Cancelled");
       const doneStages = progressStages.filter((stage) => stage.state === "done").length;

@@ -1,4 +1,4 @@
-const CryptoJS = require("crypto-js");
+const passwordService = require("../utils/passwordService");
 const User = require("../models/User");
 const Driver = require("../models/Driver");
 const Order = require("../models/Order");
@@ -6,6 +6,7 @@ const Store = require("../models/Store");
 const Hub = require("../models/Hub");
 const mongoose = require("mongoose");
 const orderController = require("./orderController");
+// Truy ngược chủ cửa hàng để gửi push khi đơn được claim/gán
 const resolveVendorUserForStore = async (storeId) => {
     if (!storeId) return { user: null, title: "" };
     try {
@@ -45,6 +46,7 @@ module.exports = {
                 }
             }
 
+            // Trả về thông tin user/driver ở dạng an toàn để client hiển thị profile
             const safeUser = user
                 ? {
                     id: user._id,
@@ -106,11 +108,14 @@ module.exports = {
             const exist = await User.findOne({ email });
             if (exist) return res.status(400).json({ status: false, message: "Email đã tồn tại" });
 
+            const hashedPassword = await passwordService.hashPassword(password);
             const newUser = new User({
                 username,
                 email,
                 phone: phone || "",
-                password: CryptoJS.AES.encrypt(password, process.env.SECRET).toString(),
+                password: hashedPassword,
+                passwordVersion: 2,
+                passwordMigratedAt: new Date(),
                 userType: "Driver",
                 verification: true,
                 phoneVerification: !!phone,
@@ -261,6 +266,7 @@ module.exports = {
                 }
             } catch (_) { }
 
+            // Driver bị giới hạn 5 đơn đang giao để tránh ôm quá nhiều đơn
             const activeCount = await Order.countDocuments({
                 driverId: String(driverUserId),
                 orderStatus: { $in: ["PickedUp", "Delivering"] },
@@ -290,6 +296,7 @@ module.exports = {
             }
 
             console.log(`[claimOrder] driver=${driverUserId} order=${id} activeDelivering=${activeCount}`);
+            // Sử dụng transaction để tránh hai tài xế claim cùng lúc
             const session = await mongoose.startSession();
             session.startTransaction();
             try {

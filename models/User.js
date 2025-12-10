@@ -9,6 +9,8 @@ const UserSchema = new mongoose.Schema(
     // Firebase project ID the FCM token belongs to (for multi-project support)
     fcmProject: { type: String, required: false, default: "" },
     password: { type: String, required: true },
+    passwordVersion: { type: Number, default: 2 },
+    passwordMigratedAt: { type: Date },
     verification: { type: Boolean, default: false },
     phone: { type: String, default: "0123456789" },
     phoneVerification: { type: Boolean, default: false },

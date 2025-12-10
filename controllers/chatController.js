@@ -3,6 +3,7 @@ const Message = require("../models/Message");
 const Store = require("../models/Store");
 const User = require("../models/User");
 
+// Bảo vệ mọi API chat: vendorId phải là userType=Vendor hoặc sở hữu store
 const ensureVendorUser = async (vendorId) => {
     const vendor = await User.findById(vendorId);
     if (!vendor) {
@@ -34,6 +35,7 @@ module.exports = {
             let { vendorId, storeId } = req.body;
 
             if (!vendorId && storeId) {
+                // Client chỉ biết storeId => lấy owner làm đầu mối chat
                 const store = await Store.findById(storeId).select("owner title");
                 if (!store) {
                     return res.status(404).json({ status: false, message: "Không tìm thấy cửa hàng" });
@@ -53,6 +55,7 @@ module.exports = {
             });
 
             if (!conv) {
+                // Lazy create hội thoại đầu tiên, tránh tạo trùng bằng unique constraint
                 conv = new Conversation({
                     participants: { user: userId, vendor: vendorId },
                     lastMessage: "",
@@ -243,6 +246,7 @@ module.exports = {
             }
 
             const me = await User.findById(userId).select("userType");
+            // Lưu lịch sử để socket và mobile đồng bộ dễ dàng
             const msg = await Message.create({
                 conversation: conversation._id,
                 sender: userId,

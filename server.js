@@ -4,7 +4,11 @@ dotenv.config();
 
 const express = require("express");
 const http = require("http");
+const https = require("https");
+const fs = require("fs");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const mongoose = require("mongoose");
 const path = require("path");
 const i18n = require("i18n");
@@ -36,15 +40,133 @@ const RecommendationRoute = require("./routes/recommendation");
 const AnalyticsRoute = require("./routes/analytics");
 const BannerRoute = require("./routes/banner");
 const startDeliveryWatchdog = require("./watchdogs/deliveryWatchdog");
+const passwordService = require("./utils/passwordService");
 // const PromotionRoute = require("./routes/promotion");
 // Test FCM route (added for debugging) after dotenv loaded
 const { sendPushNotification, canUseAdmin, getFcmEnvInfo } = require('./utils/notification_service');
 
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "http://127.0.0.1:3000",
+];
+
+const parseAllowedOrigins = () => {
+  const raw = process.env.CORS_ORIGINS;
+  if (raw && raw.trim().length) {
+    return raw
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+  }
+  return DEFAULT_ALLOWED_ORIGINS;
+};
+
+const buildHttpsOptions = () => {
+  if (process.env.HTTPS_ENABLED !== "true") {
+    return null;
+  }
+
+  const keyPath = process.env.HTTPS_KEY_PATH;
+  const certPath = process.env.HTTPS_CERT_PATH;
+  if (!keyPath || !certPath) {
+    console.warn("[HTTPS] HTTPS_ENABLED but HTTPS_KEY_PATH/HTTPS_CERT_PATH missing");
+    return null;
+  }
+
+  try {
+    const options = {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    };
+    if (process.env.HTTPS_PASSPHRASE) {
+      options.passphrase = process.env.HTTPS_PASSPHRASE;
+    }
+    return options;
+  } catch (error) {
+    console.error(`[HTTPS] Failed to load certificates: ${error.message}`);
+    return null;
+  }
+};
+
 const app = express();
-const server = http.createServer(app);
+app.enable("trust proxy");
+
+const allowedOrigins = parseAllowedOrigins();
+const allowAllOrigins = process.env.CORS_ALLOW_ALL === "true";
+console.log(
+  `[CORS] Allowed origins: ${allowAllOrigins ? "ALL" : allowedOrigins.join(", ")}`
+);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowAllOrigins || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const rateLimitWindowMinutes = Math.max(
+  parseInt(process.env.RATE_LIMIT_WINDOW_MINUTES || "15", 10),
+  1
+);
+const rateLimitWindowMs = rateLimitWindowMinutes * 60 * 1000;
+const apiLimiter = rateLimit({
+  windowMs: rateLimitWindowMs,
+  max: parseInt(process.env.RATE_LIMIT_MAX || "400", 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const authLimiter = rateLimit({
+  windowMs: rateLimitWindowMs,
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || "40", 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api", apiLimiter);
+app.use("/payment", apiLimiter);
+app.use(
+  [
+    "/login",
+    "/register",
+    "/register-admin",
+    "/forgot-password",
+    "/reset-password",
+    "/change-password",
+    "/send-phone-otp",
+    "/verify-phone-otp",
+  ],
+  authLimiter
+);
+
+const httpsOptions = buildHttpsOptions();
+const httpServer = http.createServer(app);
+const httpsServer = httpsOptions ? https.createServer(httpsOptions, app) : null;
+const primaryServer = httpsServer || httpServer;
+const port = parseInt(process.env.PORT || "3000", 10);
+const httpsPort = parseInt(process.env.HTTPS_PORT || "3443", 10);
+
 const { Server } = require("socket.io");
-const io = new Server(server, {
-  cors: { origin: "*" },
+const io = new Server(primaryServer, {
+  cors: { origin: allowAllOrigins ? "*" : allowedOrigins, credentials: true },
 });
 
 // socket auth
@@ -71,7 +193,6 @@ io.on("connection", (socket) => {
 
 // attach io for controllers to emit
 app.set("io", io);
-const port = process.env.PORT || 3000;
 
 // Configure i18n
 i18n.configure({
@@ -91,10 +212,6 @@ mongoose
   .then(() => console.log("Database Connected"))
   .catch((err) => console.log(" DB connection error:", err));
 
-// Enable CORS for web clients (Flutter web)
-app.use(cors({ origin: "*" }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 // Request logging for shipper & upload public endpoints
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/shippers') || req.path.startsWith('/api/upload/public/shipper-doc')) {
@@ -174,19 +291,18 @@ app.get('/api/fcm-status', (req, res) => {
 
 // Auto-create default admin if not exists
 const User = require("./models/User");
-const CryptoJS = require("crypto-js");
 
 mongoose.connection.once("open", async () => {
   try {
     const adminExists = await User.findOne({ userType: "Admin" });
     if (!adminExists) {
+      const hashedPassword = await passwordService.hashPassword("admin123");
       const defaultAdmin = new User({
         username: "Admin",
         email: "admin@tmdt.com",
-        password: CryptoJS.AES.encrypt(
-          "admin123",
-          process.env.SECRET
-        ).toString(),
+        password: hashedPassword,
+        passwordVersion: 2,
+        passwordMigratedAt: new Date(),
         userType: "Admin",
         verification: true,
         phoneVerification: true,
@@ -202,10 +318,17 @@ mongoose.connection.once("open", async () => {
   }
 });
 
-server.listen(port, "0.0.0.0", () => {
-  console.log(`Server listening at http://0.0.0.0:${port}`);
-  console.log(`Admin Dashboard: http://localhost:${port}/admin\n`);
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log(`HTTP server listening at http://0.0.0.0:${port}`);
+  console.log(`Admin Dashboard: http://localhost:${port}/admin`);
 });
+
+if (httpsServer) {
+  httpsServer.listen(httpsPort, "0.0.0.0", () => {
+    console.log(`HTTPS server listening at https://0.0.0.0:${httpsPort}`);
+    console.log(`Admin Dashboard (secure): https://localhost:${httpsPort}/admin`);
+  });
+}
 
 startDeliveryWatchdog(io);
 

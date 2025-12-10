@@ -7,6 +7,7 @@ const {
   verifySecureHash,
 } = require("../utils/vnpay");
 
+// Chuẩn hoá dữ liệu trả về từ VNPay để lưu cùng Order/Topup
 const gatewayPayloadFromQuery = (query = {}) => ({
   paymentGatewayTxnId: query["vnp_TransactionNo"] || "",
   paymentGatewayTxnDate: query["vnp_PayDate"] || "",
@@ -15,6 +16,7 @@ const gatewayPayloadFromQuery = (query = {}) => ({
   paymentGatewayPayload: query,
 });
 
+// Xử lý IPN riêng cho giao dịch nạp ví tài xế
 async function handleWalletIpn(topup, query, rspCode) {
   if (!topup) {
     return { response: { RspCode: "01", Message: "Order not found" } };
@@ -62,6 +64,7 @@ const createVnpayPayment = async (req, res) => {
     }
 
     // Calculate amount from cart items
+    // Tổng tiền dựa trên từng dòng cart để hạn chế client gửi amount tuỳ ý
     const amount = cartItems.reduce((sum, item) => {
       const price = Number(item.price);
       const qty = Number(item.quantity || 1);
@@ -110,6 +113,7 @@ const createVnpayPayment = async (req, res) => {
       expireMinutes: 15,
     });
 
+    // VNPay yêu cầu ký tham số => createPaymentUrl sẽ append signature hợp lệ
     const url = createPaymentUrl(vnpUrl, params, hashSecret);
 
     return res.status(200).json({ url });

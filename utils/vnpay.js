@@ -134,6 +134,7 @@ async function requestVnpayRefund({
   createdBy = "system",
   transactionType,
 }) {
+  // API refund của VNPay yêu cầu bộ env tối thiểu, thiếu là fail ngay nên kiểm tra sớm để log dễ
   const apiUrl = (process.env.VNP_API_URL || "").trim();
   const tmnCode = (process.env.VNP_TMNCODE || "").trim();
   const hashSecret = (process.env.VNP_HASHSECRET || "").trim();
@@ -169,6 +170,7 @@ async function requestVnpayRefund({
     vnp_RefundReason: reason,
   };
 
+  // VNPay bắt buộc sắp theo alphabet rồi ký giống như payment nên tái sử dụng helper ở trên
   const sorted = sortObject(payload);
   const signData = Object.keys(sorted)
     .map((k) => `${k}=${encodeURIComponent(sorted[k]).replace(/%20/g, "+")}`)
@@ -176,6 +178,7 @@ async function requestVnpayRefund({
   const secureHash = hmacSHA512(hashSecret.trim(), signData.trim());
   const body = { ...sorted, vnp_SecureHash: secureHash };
 
+  // VNPay API trả JSON nên fetch trực tiếp, caller sẽ xử lý mã phản hồi chi tiết nếu cần
   const response = await fetch(apiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

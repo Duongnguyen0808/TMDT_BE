@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const passwordService = require("../utils/passwordService");
 module.exports = {
   getUser: async (req, res) => {
     try {
@@ -151,15 +152,9 @@ module.exports = {
         });
       }
 
-      // Xác minh mật khẩu
-      const CryptoJS = require("crypto-js");
-      const decryptedPassword = CryptoJS.AES.decrypt(
-        user.password,
-        process.env.SECRET
-      );
-      const depassword = decryptedPassword.toString(CryptoJS.enc.Utf8);
+      const passwordOk = await passwordService.verifyUserPassword(user, password);
 
-      if (depassword !== password) {
+      if (!passwordOk) {
         return res.status(400).json({
           status: false,
           message: "Mật khẩu không chính xác",

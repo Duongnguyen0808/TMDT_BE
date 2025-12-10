@@ -6,6 +6,7 @@ const User = require("../models/User");
 const { Types } = mongoose;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+// Chuyển mọi kiểu input (string/ObjectId) sang ObjectId hợp lệ
 const toObjectId = (value) => {
     if (!value) return null;
     if (value instanceof Types.ObjectId) return value;
@@ -15,6 +16,7 @@ const toObjectId = (value) => {
     return null;
 };
 
+// Tránh query phạm vi quá lớn gây scan nhiều dữ liệu
 const clampRange = (input, { min = 7, max = 180, fallback = 30 } = {}) => {
     const numeric = Number(input);
     if (Number.isNaN(numeric)) return fallback;

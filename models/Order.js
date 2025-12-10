@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 
+// Reusable schema cho từng item để giúp controller thao tác dễ hơn (populate appliances, tính tiền,...)
 const orderItemSchema = new mongoose.Schema({
   appliancesId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -12,6 +13,7 @@ const orderItemSchema = new mongoose.Schema({
   instructions: { type: String, default: "" },
 });
 
+// OrderSchema gom hầu hết trạng thái vận hành của một đơn: thanh toán, đề xuất shipper, hub logistics, hoàn tiền
 const OrderSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -96,6 +98,7 @@ const OrderSchema = new mongoose.Schema(
     },
     deliveryProofReminderSentAt: { type: Date },
     deliveryProofEscalatedAt: { type: Date },
+    // Chuỗi cảnh báo giao hàng để support biết mức độ nghiêm trọng
     deliveryIssueStatus: {
       type: String,
       enum: ["None", "Warned", "Escalated", "Disputed", "Resolved"],
@@ -134,6 +137,7 @@ const OrderSchema = new mongoose.Schema(
     // Logistics hubs & status flow (separate from delivery orderStatus)
     originHub: { type: mongoose.Schema.Types.ObjectId, ref: "Hub" },
     localHub: { type: mongoose.Schema.Types.ObjectId, ref: "Hub" },
+    // Dòng trạng thái logistics song song với orderStatus, phục vụ màn hình Hub tracking
     logisticStatus: {
       type: String,
       enum: [
@@ -178,6 +182,7 @@ const OrderSchema = new mongoose.Schema(
     refundAt: { type: Date },
     refundReference: { type: String, default: "" },
     refundResponse: { type: mongoose.Schema.Types.Mixed },
+    // Ghi lại phần chia doanh thu và lịch sử thu phí tài xế để Dashboard payout truy vấn nhanh
     driverCommissionAmount: { type: Number, default: 0 },
     driverCommissionChargedAt: { type: Date },
     driverPayoutAmount: { type: Number, default: 0 },
@@ -188,7 +193,11 @@ const OrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Indexes cho query hiệu quả
+// Indexes cho các màn hình phổ biến:
+// - userId + createdAt: lịch sử mua của khách
+// - storeId + orderStatus: dashboard shop xem đơn theo trạng thái
+// - paymentStatus: cron đối soát thanh toán
+// - pickupReadyAt: luồng đề xuất shipper ưu tiên đơn sắp hết hạn pickup
 OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ storeId: 1, orderStatus: 1 });
 OrderSchema.index({ paymentStatus: 1 });
