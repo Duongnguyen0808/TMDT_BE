@@ -14,16 +14,18 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    const payload = await response.json();
+    const token = payload.userToken;
+    const user = payload.data || payload;
 
-    if (data.userToken && data.userType === "Admin") {
-      authToken = data.userToken;
-      adminUser = data;
+    if (token && user?.userType === "Admin") {
+      authToken = token;
+      adminUser = user;
       localStorage.setItem("adminToken", authToken);
-      localStorage.setItem("adminUser", JSON.stringify(data));
+      localStorage.setItem("adminUser", JSON.stringify(user));
 
       document.getElementById("loginModal").classList.remove("active");
-      document.getElementById("admin-name").textContent = data.username;
+      document.getElementById("admin-name").textContent = user.username;
 
       // Load dashboard
       loadDashboard();

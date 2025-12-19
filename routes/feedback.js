@@ -16,11 +16,6 @@ router.get(
   verifyTokenAndAuthorization,
   feedbackController.getUserFeedback
 );
-router.get(
-  "/:id",
-  verifyTokenAndAuthorization,
-  feedbackController.getFeedbackById
-);
 
 // Admin routes
 router.get("/admin/all", verifyAdmin, feedbackController.getAllFeedback);
@@ -31,5 +26,12 @@ router.patch(
   feedbackController.updateFeedbackStatus
 );
 router.delete("/admin/:id", verifyAdmin, feedbackController.deleteFeedback);
+
+// User feedback detail route (kept last to avoid conflicting with /admin/* paths)
+router.get(
+  "/:id",
+  verifyTokenAndAuthorization,
+  feedbackController.getFeedbackById
+);
 
 module.exports = router;

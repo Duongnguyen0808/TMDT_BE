@@ -3,6 +3,8 @@ const User = require("../models/User");
 const Store = require("../models/Store");
 const Appliances = require("../models/Appliances");
 const Voucher = require("../models/Voucher");
+const ShipperApplication = require("../models/ShipperApplication");
+const Rating = require("../models/Rating");
 
 module.exports = {
   // Tổng quan Dashboard
@@ -53,6 +55,11 @@ module.exports = {
         verification: "Đang chờ duyệt",
       });
 
+      // Shipper chờ duyệt
+      const pendingShippers = await ShipperApplication.countDocuments({
+        approvalStatus: "pending",
+      });
+
       res.status(200).json({
         status: true,
         data: {
@@ -63,6 +70,7 @@ module.exports = {
             totalOrders,
             totalRevenue,
             pendingStores,
+            pendingShippers,
           },
           orders: {
             pending: pendingOrders,
@@ -281,11 +289,72 @@ module.exports = {
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
-      const stores = await Store.find(query)
+      let stores = await Store.find(query)
         .populate("owner", "username email phone")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
+
+      if (stores.length) {
+        const storeIds = stores
+          .map((store) => store?._id?.toString())
+          .filter(Boolean);
+
+        if (storeIds.length) {
+          const ratingStats = await Rating.aggregate([
+            {
+              $match: {
+                ratingType: "Store",
+                product: { $in: storeIds },
+              },
+            },
+            {
+              $group: {
+                _id: "$product",
+                averageRating: { $avg: "$rating" },
+                ratingCount: { $sum: 1 },
+              },
+            },
+          ]);
+
+          const ratingMap = ratingStats.reduce((acc, stat) => {
+            acc[stat._id] = {
+              averageRating: Number(
+                Number.isFinite(stat.averageRating)
+                  ? stat.averageRating
+                  : 0
+              ),
+              ratingCount: stat.ratingCount || 0,
+            };
+            return acc;
+          }, {});
+
+          stores = stores.map((store) => {
+            const stat = ratingMap[store._id.toString()];
+            const fallbackRating =
+              typeof store.rating === "number" && !Number.isNaN(store.rating)
+                ? store.rating
+                : 0;
+            const fallbackCount =
+              typeof store.ratingCount === "number" && store.ratingCount >= 0
+                ? store.ratingCount
+                : 0;
+
+            return {
+              ...store,
+              rating:
+                stat && Number.isFinite(stat.averageRating)
+                  ? Number(stat.averageRating)
+                  : fallbackRating,
+              ratingCount:
+                stat && Number.isFinite(stat.ratingCount)
+                  ? stat.ratingCount
+                  : fallbackCount,
+            };
+          });
+        }
+      }
 
       const total = await Store.countDocuments(query);
 
@@ -416,10 +485,74 @@ module.exports = {
         filter.title = { $regex: keyword, $options: "i" };
       }
 
-      const products = await Appliances.find(filter)
+      let products = await Appliances.find(filter)
+        .populate("store", "title logoUrl code")
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
+
+      if (products.length) {
+        const productIds = products
+          .map((product) => product?._id?.toString())
+          .filter(Boolean);
+
+        if (productIds.length) {
+          const ratingStats = await Rating.aggregate([
+            {
+              $match: {
+                ratingType: "Appliances",
+                product: { $in: productIds },
+              },
+            },
+            {
+              $group: {
+                _id: "$product",
+                averageRating: { $avg: "$rating" },
+                ratingCount: { $sum: 1 },
+              },
+            },
+          ]);
+
+          const ratingMap = ratingStats.reduce((acc, stat) => {
+            acc[stat._id] = {
+              averageRating: Number(
+                Number.isFinite(stat.averageRating)
+                  ? stat.averageRating
+                  : 0
+              ),
+              ratingCount: stat.ratingCount || 0,
+            };
+            return acc;
+          }, {});
+
+          products = products.map((product) => {
+            const stat = ratingMap[product._id.toString()];
+            const fallbackRating =
+              typeof product.rating === "number" &&
+                !Number.isNaN(product.rating)
+                ? product.rating
+                : 0;
+            const fallbackCount =
+              typeof product.ratingCount === "number" &&
+                product.ratingCount >= 0
+                ? product.ratingCount
+                : 0;
+
+            return {
+              ...product,
+              rating:
+                stat && Number.isFinite(stat.averageRating)
+                  ? Number(stat.averageRating)
+                  : fallbackRating,
+              ratingCount:
+                stat && Number.isFinite(stat.ratingCount)
+                  ? stat.ratingCount
+                  : fallbackCount,
+            };
+          });
+        }
+      }
 
       const total = await Appliances.countDocuments(filter);
 
@@ -508,7 +641,123 @@ module.exports = {
       // Lấy thông tin cửa hàng nếu là Vendor
       let storeInfo = null;
       if (user.userType === "Vendor") {
-        storeInfo = await Store.findOne({ owner: user._id });
+        storeInfo = await Store.findOne({ owner: user._id }).lean();
+        if (storeInfo) {
+          const [metrics] = await Order.aggregate([
+            { $match: { storeId: storeInfo._id } },
+            {
+              $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                completedOrders: {
+                  $sum: {
+                    $cond: [{ $eq: ["$orderStatus", "Delivered"] }, 1, 0],
+                  },
+                },
+                cancelledOrders: {
+                  $sum: {
+                    $cond: [{ $eq: ["$orderStatus", "Cancelled"] }, 1, 0],
+                  },
+                },
+                activeOrders: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $in: [
+                          "$orderStatus",
+                          [
+                            "Pending",
+                            "Preparing",
+                            "ReadyForPickup",
+                            "WaitingShipper",
+                            "PickedUp",
+                            "Delivering",
+                          ],
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                totalRevenue: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ["$paymentStatus", "Completed"] },
+                      "$grandTotal",
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ]);
+          storeInfo.metrics = {
+            totalOrders: metrics ? metrics.totalOrders || 0 : 0,
+            completedOrders: metrics ? metrics.completedOrders || 0 : 0,
+            cancelledOrders: metrics ? metrics.cancelledOrders || 0 : 0,
+            activeOrders: metrics ? metrics.activeOrders || 0 : 0,
+            totalRevenue: metrics ? metrics.totalRevenue || 0 : 0,
+          };
+        }
+      }
+
+      let driverStats = null;
+      let shipperProfile = null;
+      if (user.userType === "Driver") {
+        const driverId = user._id.toString();
+        shipperProfile = await ShipperApplication.findOne({
+          user: user._id,
+        }).lean();
+        const statusBuckets = await Order.aggregate([
+          { $match: { driverId } },
+          {
+            $group: {
+              _id: "$orderStatus",
+              count: { $sum: 1 },
+              totalCommission: {
+                $sum: { $ifNull: ["$driverCommissionAmount", 0] },
+              },
+              totalPayout: {
+                $sum: { $ifNull: ["$driverPayoutAmount", 0] },
+              },
+            },
+          },
+        ]);
+
+        const baseStats = {
+          totalOrders: 0,
+          completedOrders: 0,
+          activeOrders: 0,
+          cancelledOrders: 0,
+          totalCommission: 0,
+          totalPayout: 0,
+          rating: user.rating || 0,
+          ratingCount: user.ratingCount || 0,
+        };
+        const activeStatuses = [
+          "Pending",
+          "Preparing",
+          "ReadyForPickup",
+          "WaitingShipper",
+          "PickedUp",
+          "Delivering",
+        ];
+
+        statusBuckets.forEach((bucket) => {
+          baseStats.totalOrders += bucket.count;
+          baseStats.totalCommission += bucket.totalCommission || 0;
+          baseStats.totalPayout += bucket.totalPayout || 0;
+          if (bucket._id === "Delivered") {
+            baseStats.completedOrders += bucket.count;
+          } else if (bucket._id === "Cancelled") {
+            baseStats.cancelledOrders += bucket.count;
+          } else if (activeStatuses.includes(bucket._id)) {
+            baseStats.activeOrders += bucket.count;
+          }
+        });
+
+        driverStats = baseStats;
       }
 
       res.status(200).json({
@@ -517,6 +766,8 @@ module.exports = {
           user,
           orderStats,
           storeInfo,
+          driverStats,
+          shipperProfile,
         },
       });
     } catch (error) {

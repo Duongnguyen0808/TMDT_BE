@@ -2,6 +2,49 @@
 let currentStoresPage = 1;
 const storesPerPage = 20;
 
+function getNormalizedStoreRating(value) {
+  if (typeof window.normalizeRatingValue === "function") {
+    return window.normalizeRatingValue(value);
+  }
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+  if (value < 0) return 0;
+  if (value > 5) return 5;
+  return value;
+}
+
+function getStoreStarMarkup(value) {
+  if (typeof window.createStarRating === "function") {
+    return window.createStarRating(value);
+  }
+  const normalized = getNormalizedStoreRating(value);
+  if (normalized === null) {
+    return "";
+  }
+  return `<span>&#9733; ${normalized.toFixed(1)}</span>`;
+}
+
+function renderStoreRating(rating, ratingCount) {
+  const normalized = getNormalizedStoreRating(rating);
+  const totalRatings =
+    typeof ratingCount === "number" && ratingCount >= 0 ? ratingCount : 0;
+
+  if (normalized === null || totalRatings === 0) {
+    return '<span style="color:#9e9e9e;font-style:italic;">Chưa có đánh giá</span>';
+  }
+
+  return `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      ${getStoreStarMarkup(normalized)}
+      <div>
+        <strong>${normalized.toFixed(1)}</strong>
+        <small style="color:#666;">(${totalRatings})</small>
+      </div>
+    </div>
+  `;
+}
+
 async function loadStores(page = 1) {
   const verification = document.getElementById(
     "store-verification-filter"
@@ -41,29 +84,25 @@ function renderStoresTable(stores) {
 
       return `
             <tr>
-                <td><img src="${store.logoUrl}" alt="${
-        store.title
-      }" class="store-logo"></td>
+                <td><img src="${store.logoUrl}" alt="${store.title
+        }" class="store-logo"></td>
                 <td>${store.title}</td>
                 <td>${store.code}</td>
-                <td>⭐ ${store.rating.toFixed(1)} (${store.ratingCount})</td>
+                <td>${renderStoreRating(store.rating, store.ratingCount)}</td>
                 <td>
-                    ${
-                      store.isAvailable
-                        ? '<span class="badge badge-success">Hoạt động</span>'
-                        : '<span class="badge badge-danger">Tạm ngưng</span>'
-                    }
+                    ${store.isAvailable
+          ? '<span class="badge badge-success">Hoạt động</span>'
+          : '<span class="badge badge-danger">Tạm ngưng</span>'
+        }
                 </td>
                 <td>${verificationBadge}</td>
                 <td>
-                    ${
-                      store.verification === "Đang chờ duyệt"
-                        ? `<button class="btn btn-success btn-sm" onclick="openVerifyModal('${store._id}')">Duyệt</button>`
-                        : `<button class="btn btn-sm btn-primary" onclick="viewStore('${store._id}')">Xem</button>`
-                    }
-                    <button class="btn btn-danger btn-sm" onclick="deleteStore('${
-                      store._id
-                    }')">Xóa</button>
+                    ${store.verification === "Đang chờ duyệt"
+          ? `<button class="btn btn-success btn-sm" onclick="openVerifyModal('${store._id}')">Duyệt</button>`
+          : `<button class="btn btn-sm btn-primary" onclick="viewStore('${store._id}')">Xem</button>`
+        }
+                    <button class="btn btn-danger btn-sm" onclick="deleteStore('${store._id
+        }')">Xóa</button>
                 </td>
             </tr>
         `;
@@ -141,7 +180,7 @@ async function deleteStore(storeId) {
       showNotification("Đã xóa cửa hàng thành công!");
       loadStores(currentStoresPage);
     } else {
-      showNotification("Xóa store thất bại!", "error");
+      showNotification("Xóa cửa hàng thất bại!", "error");
     }
   } catch (error) {
     console.error("Error deleting store:", error);

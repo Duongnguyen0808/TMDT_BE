@@ -49,16 +49,15 @@ function renderOrdersTable(orders) {
       return `
             <tr>
                 <td>#${order._id.substring(0, 8)}</td>
-                <td>${order.userId?.username || "N/A"}</td>
-                <td>${order.storeId?.title || "N/A"}</td>
+                <td>${order.userId?.username || "Chưa có"}</td>
+                <td>${order.storeId?.title || "Chưa có"}</td>
                 <td>${formatCurrency(order.grandTotal)}</td>
                 <td>${paymentBadge}</td>
                 <td>${statusBadge}</td>
                 <td>${formatDate(order.createdAt)}</td>
                 <td>
-                    <button class="btn btn-sm btn-primary" onclick="viewOrder('${
-                      order._id
-                    }')">Chi tiết</button>
+                    <button class="btn btn-sm btn-primary" onclick="viewOrder('${order._id
+        }')">Chi tiết</button>
                 </td>
             </tr>
         `;
@@ -101,6 +100,8 @@ async function viewOrder(orderId) {
   const content = document.getElementById("order-detail-content");
   content.innerHTML =
     '<p style="text-align: center; padding: 40px;">Đang tải...</p>';
+  // Ensure modal is visible even if previously closed via inline style
+  modal.style.display = "block";
   modal.classList.add("active");
 
   try {
@@ -140,18 +141,17 @@ async function viewOrder(orderId) {
         <tr>
           <td>
             <div style="display: flex; align-items: center; gap: 10px;">
-              <img src="${
-                item.appliancesId?.imageUrl?.[0] || "/placeholder.png"
-              }" 
+              <img src="${item.appliancesId?.imageUrl?.[0] || "/placeholder.png"
+            }" 
                    style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
-              <span>${item.appliancesId?.title || "N/A"}</span>
+              <span>${item.appliancesId?.title || "Chưa có"}</span>
             </div>
           </td>
           <td>${formatCurrency(item.price)}</td>
           <td>${item.quantity}</td>
           <td><strong>${formatCurrency(
-            item.price * item.quantity
-          )}</strong></td>
+              item.price * item.quantity
+            )}</strong></td>
         </tr>
       `
         )
@@ -171,41 +171,35 @@ async function viewOrder(orderId) {
                 Cập Nhật Trạng Thái:
               </label>
               <select id="update-order-status" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px;">
-                <option value="Pending" ${
-                  order.orderStatus === "Pending" ? "selected" : ""
-                }>Chờ xử lý</option>
-                <option value="Preparing" ${
-                  order.orderStatus === "Preparing" ? "selected" : ""
-                }>Đang chuẩn bị</option>
-                <option value="Delivered" ${
-                  order.orderStatus === "Delivered" ? "selected" : ""
-                }>Đã giao</option>
-                <option value="Cancelled" ${
-                  order.orderStatus === "Cancelled" ? "selected" : ""
-                }>Đã hủy</option>
+                <option value="Pending" ${order.orderStatus === "Pending" ? "selected" : ""
+        }>Chờ xử lý</option>
+                <option value="Preparing" ${order.orderStatus === "Preparing" ? "selected" : ""
+        }>Đang chuẩn bị</option>
+                <option value="Delivered" ${order.orderStatus === "Delivered" ? "selected" : ""
+        }>Đã giao</option>
+                <option value="Cancelled" ${order.orderStatus === "Cancelled" ? "selected" : ""
+        }>Đã hủy</option>
               </select>
-              <button onclick="updateOrderStatus('${
-                order._id
-              }')" class="btn btn-primary btn-block">
+              <button onclick="updateOrderStatus('${order._id
+        }')" class="btn btn-primary btn-block">
                 Cập Nhật Trạng Thái
               </button>
             </div>
           </div>
           <div>
             <h3 style="margin-bottom: 10px; color: #1e3c72;">Thông Tin Khách Hàng</h3>
-            <p><strong>Tên:</strong> ${order.userId?.username || "N/A"}</p>
-            <p><strong>Email:</strong> ${order.userId?.email || "N/A"}</p>
-            <p><strong>SĐT:</strong> ${order.userId?.phone || "N/A"}</p>
-            <p><strong>Địa chỉ:</strong> ${
-              order.deliveryAddress?.addressLine || "N/A"
-            }</p>
+            <p><strong>Tên:</strong> ${order.userId?.username || "Chưa có"}</p>
+            <p><strong>Email:</strong> ${order.userId?.email || "Chưa có"}</p>
+            <p><strong>SĐT:</strong> ${order.userId?.phone || "Chưa có"}</p>
+            <p><strong>Địa chỉ:</strong> ${order.deliveryAddress?.addressLine || "Chưa có"
+        }</p>
           </div>
         </div>
 
         <div style="margin-bottom: 20px;">
           <h3 style="margin-bottom: 10px; color: #1e3c72;">Cửa Hàng</h3>
-          <p><strong>Tên:</strong> ${order.storeId?.title || "N/A"}</p>
-          <p><strong>Địa chỉ:</strong> ${order.storeAddress || "N/A"}</p>
+          <p><strong>Tên:</strong> ${order.storeId?.title || "Chưa có"}</p>
+          <p><strong>Địa chỉ:</strong> ${order.storeAddress || "Chưa có"}</p>
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -234,16 +228,15 @@ async function viewOrder(orderId) {
             <span>Phí giao hàng:</span>
             <strong>${formatCurrency(order.deliveryFee)}</strong>
           </div>
-          ${
-            order.discount > 0
-              ? `
+          ${order.discount > 0
+          ? `
           <div style="display: flex; justify-content: space-between; margin-bottom: 10px; color: #4CAF50;">
             <span>Giảm giá:</span>
             <strong>-${formatCurrency(order.discount)}</strong>
           </div>
           `
-              : ""
-          }
+          : ""
+        }
           <div style="display: flex; justify-content: space-between; font-size: 18px; color: #1e3c72; border-top: 2px solid #1e3c72; padding-top: 10px; margin-top: 10px;">
             <strong>Tổng cộng:</strong>
             <strong>${formatCurrency(order.grandTotal)}</strong>
@@ -252,7 +245,9 @@ async function viewOrder(orderId) {
       `;
 
       document.getElementById("order-detail-content").innerHTML = html;
-      document.getElementById("orderDetailModal").classList.add("active");
+      const m = document.getElementById("orderDetailModal");
+      m.style.display = "block";
+      m.classList.add("active");
     }
   } catch (error) {
     console.error("Error loading order details:", error);
@@ -263,10 +258,17 @@ async function viewOrder(orderId) {
 // Cập nhật trạng thái đơn hàng
 async function updateOrderStatus(orderId) {
   const newStatus = document.getElementById("update-order-status").value;
+  const statusLabels = {
+    Pending: "Chờ xử lý",
+    Preparing: "Đang chuẩn bị",
+    Delivered: "Đã giao",
+    Cancelled: "Đã hủy",
+  };
+  const statusLabel = statusLabels[newStatus] || newStatus;
 
   if (
     !confirm(
-      `Bạn có chắc muốn cập nhật trạng thái đơn hàng thành "${newStatus}"?`
+      `Bạn có chắc muốn cập nhật trạng thái đơn hàng thành "${statusLabel}"?`
     )
   ) {
     return;

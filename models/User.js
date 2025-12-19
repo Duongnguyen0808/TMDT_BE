@@ -6,7 +6,11 @@ const UserSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     otp: { type: String, required: false, default: "none" },
     fcm: { type: String, required: false, default: "none" },
+    // Firebase project ID the FCM token belongs to (for multi-project support)
+    fcmProject: { type: String, required: false, default: "" },
     password: { type: String, required: true },
+    passwordVersion: { type: Number, default: 2 },
+    passwordMigratedAt: { type: Date },
     verification: { type: Boolean, default: false },
     phone: { type: String, default: "0123456789" },
     phoneVerification: { type: Boolean, default: false },
@@ -29,6 +33,11 @@ const UserSchema = new mongoose.Schema(
       default:
         "https://ui-avatars.com/api/?name=User&background=6366f1&color=fff&size=200",
     },
+    rating: { type: Number, default: 0 },
+    ratingCount: { type: Number, default: 0 },
+    // Password reset support
+    resetPasswordOTP: { type: String, required: false },
+    resetPasswordExpires: { type: Date, required: false },
   },
   { timestamps: true }
 );

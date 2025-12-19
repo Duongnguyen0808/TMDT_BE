@@ -56,6 +56,9 @@ function loadPageData(page) {
     case "users":
       loadUsers(1);
       break;
+    case "shippers":
+      loadShippers('pending');
+      break;
     case "stores":
       loadStores(1);
       break;
@@ -70,6 +73,9 @@ function loadPageData(page) {
       break;
     case "vouchers":
       loadVouchers(1);
+      break;
+    case "banners":
+      loadBanners(1);
       break;
   }
 }

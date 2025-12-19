@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const passwordService = require("../utils/passwordService");
 module.exports = {
   getUser: async (req, res) => {
     try {
@@ -100,7 +101,7 @@ module.exports = {
 
   // Lưu FCM token
   updateFcmToken: async (req, res) => {
-    const { fcmToken } = req.body;
+    const { fcmToken, projectId } = req.body;
     const userId = req.user.id;
 
     if (!fcmToken) {
@@ -110,12 +111,19 @@ module.exports = {
       });
     }
 
+    if (!projectId) {
+      return res.status(400).json({
+        status: false,
+        message: "Firebase projectId is required to avoid mismatched-credential",
+      });
+    }
+
     try {
-      await User.findByIdAndUpdate(userId, { fcm: fcmToken });
+      await User.findByIdAndUpdate(userId, { fcm: fcmToken, fcmProject: projectId });
 
       res.status(200).json({
         status: true,
-        message: "FCM token updated successfully",
+        message: "FCM token & project stored successfully",
       });
     } catch (error) {
       res.status(500).json({ status: false, message: error.message });
@@ -144,15 +152,9 @@ module.exports = {
         });
       }
 
-      // Xác minh mật khẩu
-      const CryptoJS = require("crypto-js");
-      const decryptedPassword = CryptoJS.AES.decrypt(
-        user.password,
-        process.env.SECRET
-      );
-      const depassword = decryptedPassword.toString(CryptoJS.enc.Utf8);
+      const passwordOk = await passwordService.verifyUserPassword(user, password);
 
-      if (depassword !== password) {
+      if (!passwordOk) {
         return res.status(400).json({
           status: false,
           message: "Mật khẩu không chính xác",

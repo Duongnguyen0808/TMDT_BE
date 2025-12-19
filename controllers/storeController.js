@@ -22,6 +22,7 @@ module.exports = {
         .json({ status: false, message: "Bạn có một trường bị thiếu" });
     }
     try {
+      // Lưu nguyên request body vì schema đã kiểm soát trường
       const newStore = new Store(req.body);
       await newStore.save();
 
@@ -80,6 +81,7 @@ module.exports = {
         ]);
       }
 
+      // Nếu không tìm được theo mã, fallback sang danh sách chung
       if (randomStore.length === 0) {
         randomStore = await Store.aggregate([
           { $match: { isAvailable: true } },
@@ -224,6 +226,28 @@ module.exports = {
       res.status(500).json({ status: false, message: error.message });
     }
   },
+  // Cập nhật thông tin cửa hàng theo owner (partial update)
+  updateStoreByOwner: async (req, res) => {
+    const ownerId = req.user.id;
+    try {
+      const store = await Store.findOne({ owner: ownerId });
+      if (!store) {
+        return res.status(404).json({ status: false, message: "Không tìm thấy cửa hàng" });
+      }
+      const { title, time, logoUrl, coords } = req.body;
+      if (title !== undefined) store.title = title;
+      if (time !== undefined) store.time = time;
+      if (logoUrl !== undefined && logoUrl) store.logoUrl = logoUrl;
+      if (coords && typeof coords === 'object') {
+        if (coords.address !== undefined) store.coords.address = coords.address;
+        // Chỉ cho phép cập nhật địa chỉ, tránh mất lat/long
+      }
+      await store.save();
+      return res.status(200).json({ status: true, message: "Cập nhật thành công", store });
+    } catch (e) {
+      return res.status(500).json({ status: false, message: e.message });
+    }
+  },
 };
 
 // Hàm tính khoảng cách Haversine
@@ -235,9 +259,9 @@ function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c; // Khoảng cách (km)

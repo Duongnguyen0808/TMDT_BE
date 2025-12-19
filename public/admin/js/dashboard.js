@@ -21,6 +21,18 @@ async function loadDashboard() {
       );
       document.getElementById("pending-stores").textContent =
         data.data.overview.pendingStores || 0;
+      const psElem = document.getElementById("pending-shippers");
+      if (psElem) psElem.textContent = data.data.overview.pendingShippers || 0;
+      // Click card to navigate to Shippers page
+      const shipperCard = document.getElementById("pending-shippers-card");
+      if (shipperCard) {
+        shipperCard.onclick = () => {
+          const navItem = document.querySelector('.nav-item[data-page="shippers"]');
+          if (navItem) navItem.click();
+        };
+      }
+
+      loadFeedbackSummary();
 
       // Load orders chart
       loadOrdersChart(data.data.orders);
@@ -108,13 +120,12 @@ async function loadTopStores() {
           (store, index) => `
                 <div class="top-store-item">
                     <div class="store-rank">#${index + 1}</div>
-                    <img src="${
-                      store.logoUrl ||
-                      store.imageUrl ||
-                      "https://via.placeholder.com/50"
-                    }" 
+                        <img src="${store.logoUrl ||
+            store.imageUrl ||
+            "https://via.placeholder.com/50"
+            }" 
                          alt="${store.title}"
-                         onerror="this.src='https://via.placeholder.com/50?text=Store'">
+                       onerror="this.src='https://via.placeholder.com/50?text=CH'">
                     <div class="top-store-info">
                         <h4>${store.title}</h4>
                         <p class="store-stats">
@@ -141,5 +152,46 @@ async function loadTopStores() {
       container.innerHTML =
         '<p style="text-align: center; padding: 20px; color: #f44336;">Không thể tải dữ liệu</p>';
     }
+  }
+}
+
+async function loadFeedbackSummary() {
+  const openEl = document.getElementById("open-feedback-count");
+  const closedEl = document.getElementById("closed-feedback-count");
+  const card = document.getElementById("feedback-stat-card");
+  if (!openEl || !closedEl) return;
+
+  try {
+    const encodeStatuses = (arr) => arr.map((s) => encodeURIComponent(s)).join(",");
+    const openStatuses = encodeStatuses([
+      "Pending",
+      "In Progress",
+      "WaitingRequester",
+    ]);
+    const closedStatuses = encodeStatuses(["Resolved", "Closed"]);
+
+    const [openResp, closedResp] = await Promise.all([
+      apiCall(
+        `/api/service-center/admin/tickets?status=${openStatuses}&limit=1`
+      ),
+      apiCall(
+        `/api/service-center/admin/tickets?status=${closedStatuses}&limit=1`
+      ),
+    ]);
+
+    const openTotal = openResp?.pagination?.total || 0;
+    const closedTotal = closedResp?.pagination?.total || 0;
+    openEl.textContent = openTotal;
+    closedEl.textContent = closedTotal;
+
+    if (card && !card.dataset.bound) {
+      card.dataset.bound = "true";
+      card.addEventListener("click", () => {
+        const navItem = document.querySelector('.nav-item[data-page="feedback"]');
+        if (navItem) navItem.click();
+      });
+    }
+  } catch (error) {
+    console.error("Error loading feedback summary:", error);
   }
 }

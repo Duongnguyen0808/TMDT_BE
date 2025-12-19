@@ -19,6 +19,13 @@ router.get(
   storeController.getStoreByOwner
 );
 
+// Cập nhật hồ sơ cửa hàng (partial update)
+router.put(
+  "/owner/profile",
+  verifyTokenAndAuthorization,
+  storeController.updateStoreByOwner
+);
+
 router.get("/:code", storeController.getRandomStore);
 
 router.get("/all/:code", storeController.getAllNearByStore);

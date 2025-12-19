@@ -34,25 +34,25 @@ const StoreSchema = new mongoose.Schema({
   },
 });
 
-// Tạo index cho tìm kiếm và query hiệu quả
+// Các index hỗ trợ dashboard lọc nhanh theo mã/trạng thái
 StoreSchema.index({ code: 1 });
 StoreSchema.index({ isAvailable: 1 });
 StoreSchema.index({ verification: 1 });
 StoreSchema.index({ owner: 1 });
 StoreSchema.index({ rating: -1 });
 
-// Tạo 2dsphere index cho tìm kiếm địa lý
+// Legacy apps vẫn query bằng latitude/longitude nên giữ index song song
 StoreSchema.index({
   "coords.latitude": 1,
   "coords.longitude": 1,
 });
 
-// Index cho geoNear query (GeoJSON format)
+// geoNear yêu cầu field kiểu GeoJSON riêng, index này phục vụ endpoint getNearbyStores
 StoreSchema.index({
   location: "2dsphere",
 });
 
-// Virtual field để chuyển coords sang GeoJSON format
+// Virtual chuyển latitude/longitude sang Point khi aggregate
 StoreSchema.virtual("location").get(function () {
   return {
     type: "Point",

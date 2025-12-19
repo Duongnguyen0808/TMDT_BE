@@ -10,8 +10,24 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
   </head>
+          <li><a href="#" onclick="showSection('logistics')">Quản Lý Vận Hành</a></li>
   <body>
     <!-- Sidebar -->
+        <section id="logistics" style="display:none">
+          <h2>Quản Lý Vận Hành</h2>
+          <h3>Điểm trung chuyển</h3>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Tọa độ</th><th>Hoạt động</th></tr></thead>
+            <tbody id="hubsTableBody"></tbody>
+          </table>
+          <h3 style="margin-top:24px">Lô hàng</h3>
+          <table border="1" cellpadding="6" cellspacing="0">
+            <thead><tr><th>Mã lô</th><th>Trạng thái</th><th>Kho tổng</th><th>Kho địa phương</th><th>Số đơn</th><th>Tiến độ</th></tr></thead>
+            <tbody id="shipmentsTableBody"></tbody>
+          </table>
+          <script src="/socket.io/socket.io.js"></script>
+          <script src="js/logistics.js"></script>
+        </section>
     <div class="sidebar">
       <div class="sidebar-header">
         <h2><i class="fas fa-store"></i> TMDT Admin</h2>
@@ -22,6 +38,9 @@
         </a>
         <a href="#" class="nav-item" data-page="users">
           <i class="fas fa-users"></i> Quản Lý Người Dùng
+        </a>
+        <a href="#" class="nav-item" data-page="shippers">
+          <i class="fas fa-motorcycle"></i> Duyệt Tài Xế
         </a>
         <a href="#" class="nav-item" data-page="stores">
           <i class="fas fa-shop"></i> Quản Lý Cửa Hàng
@@ -36,7 +55,10 @@
           <i class="fas fa-comment"></i> Phản Hồi
         </a>
         <a href="#" class="nav-item" data-page="vouchers">
-          <i class="fas fa-ticket-alt"></i> Quản Lý Voucher
+          <i class="fas fa-ticket-alt"></i> Quản Lý Mã Giảm Giá
+        </a>
+        <a href="#" class="nav-item" data-page="banners">
+          <i class="fas fa-images"></i> Quản Lý Banner
         </a>
         <a href="#" class="nav-item" onclick="logout()">
           <i class="fas fa-sign-out-alt"></i> Đăng Xuất
@@ -114,6 +136,25 @@
                 <p>Cửa Hàng Chờ Duyệt</p>
               </div>
             </div>
+            <div class="stat-card" id="pending-shippers-card" style="cursor:pointer">
+              <div class="stat-icon" style="background: #795548">
+                <i class="fas fa-motorcycle"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="pending-shippers">0</h3>
+                <p>Tài xế chờ duyệt</p>
+              </div>
+            </div>
+            <div class="stat-card" id="feedback-stat-card" style="cursor:pointer">
+              <div class="stat-icon" style="background: #ff7043">
+                <i class="fas fa-headset"></i>
+              </div>
+              <div class="stat-info">
+                <h3 id="open-feedback-count">0</h3>
+                <p>Yêu cầu hỗ trợ mở</p>
+                <span class="stat-subtext">Đã đóng: <span id="closed-feedback-count">0</span></span>
+              </div>
+            </div>
           </div>
 
           <div class="charts-section">
@@ -150,10 +191,10 @@
             <table id="users-table">
               <thead>
                 <tr>
-                  <th>Avatar</th>
-                  <th>Username</th>
+                  <th>Ảnh đại diện</th>
+                  <th>Tên đăng nhập</th>
                   <th>Email</th>
-                  <th>Phone</th>
+                  <th>Số điện thoại</th>
                   <th>Loại</th>
                   <th>Xác Minh</th>
                   <th>Ngày Tạo</th>
@@ -164,6 +205,44 @@
             </table>
           </div>
           <div class="pagination" id="users-pagination"></div>
+        </div>
+
+        <!-- Trang duyệt tài xế -->
+        <div id="shippers-page" class="page">
+          <div class="page-header">
+            <h2>Duyệt Hồ Sơ Tài Xế</h2>
+            <div class="filters">
+              <select id="shipper-status-filter">
+                <option value="pending">Chờ duyệt</option>
+                <option value="approved">Đã duyệt</option>
+                <option value="rejected">Bị từ chối</option>
+              </select>
+              <button class="btn btn-primary" id="bulk-approve-btn" title="Duyệt các hồ sơ đã chọn">
+                <i class="fas fa-check"></i> Duyệt các hồ sơ đã chọn
+              </button>
+              <button class="btn btn-danger" id="bulk-reject-btn" title="Từ chối các hồ sơ đã chọn">
+                <i class="fas fa-times"></i> Từ chối các hồ sơ đã chọn
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="shippers-table">
+              <thead>
+                <tr>
+                  <th style="width:36px"><input type="checkbox" id="shipper-select-all"/></th>
+                  <th>Người nộp</th>
+                  <th>SĐT</th>
+                  <th>Phương tiện</th>
+                  <th>Biển số</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày nộp</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="shippers-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="shippers-pagination"></div>
         </div>
 
         <!-- Stores Page -->
@@ -183,10 +262,10 @@
             <table id="stores-table">
               <thead>
                 <tr>
-                  <th>Logo</th>
-                  <th>Tên Store</th>
+                  <th>Biểu trưng</th>
+                  <th>Tên Cửa Hàng</th>
                   <th>Mã</th>
-                  <th>Rating</th>
+                  <th>Đánh Giá</th>
                   <th>Trạng Thái</th>
                   <th>Xác Minh</th>
                   <th>Hành Động</th>
@@ -234,7 +313,7 @@
                 <tr>
                   <th>Mã ĐH</th>
                   <th>Khách Hàng</th>
-                  <th>Store</th>
+                  <th>Cửa Hàng</th>
                   <th>Tổng Tiền</th>
                   <th>Thanh Toán</th>
                   <th>Trạng Thái</th>
@@ -257,15 +336,21 @@
                 <option value="">Tất cả trạng thái</option>
                 <option value="Pending">Chờ xử lý</option>
                 <option value="In Progress">Đang xử lý</option>
+                <option value="WaitingRequester">Chờ phản hồi</option>
                 <option value="Resolved">Đã giải quyết</option>
                 <option value="Closed">Đã đóng</option>
               </select>
               <select id="feedback-type-filter">
                 <option value="">Tất cả loại</option>
-                <option value="Bug">Lỗi</option>
-                <option value="Feature Request">Yêu cầu tính năng</option>
-                <option value="Complaint">Khiếu nại</option>
-                <option value="Suggestion">Góp ý</option>
+                <option value="Order">Đơn hàng</option>
+                <option value="Payment">Thanh toán</option>
+                <option value="Account">Tài khoản</option>
+                <option value="Delivery">Giao hàng</option>
+                <option value="Store">Cửa hàng</option>
+                <option value="Driver">Tài xế</option>
+                <option value="Settlement">Đối soát</option>
+                <option value="Technical">Kỹ thuật</option>
+                <option value="Other">Khác</option>
               </select>
             </div>
           </div>
@@ -273,18 +358,18 @@
           <div class="pagination" id="feedback-pagination"></div>
         </div>
 
-        <!-- Vouchers Page -->
+        <!-- Trang mã giảm giá -->
         <div id="vouchers-page" class="page">
           <div class="page-header">
-            <h2>Quản Lý Voucher</h2>
+            <h2>Quản Lý Mã Giảm Giá</h2>
             <div class="filters">
               <input
                 type="text"
                 id="voucher-search"
-                placeholder="Tìm kiếm mã voucher..."
+                placeholder="Tìm kiếm mã giảm giá..."
               />
               <button class="btn btn-primary" onclick="openVoucherModal()">
-                <i class="fas fa-plus"></i> Tạo Voucher
+                <i class="fas fa-plus"></i> Tạo mã giảm giá
               </button>
             </div>
           </div>
@@ -292,7 +377,7 @@
             <table id="vouchers-table">
               <thead>
                 <tr>
-                  <th>Mã Voucher</th>
+                  <th>Mã giảm giá</th>
                   <th>Tiêu Đề</th>
                   <th>Loại</th>
                   <th>Giá Trị</th>
@@ -307,6 +392,53 @@
             </table>
           </div>
           <div class="pagination" id="vouchers-pagination"></div>
+        </div>
+
+        <!-- Banners Page -->
+        <div id="banners-page" class="page">
+          <div class="page-header">
+            <h2>Quản Lý Banner Trang Chủ</h2>
+            <div class="filters">
+              <input
+                type="text"
+                id="banner-search"
+                placeholder="Tìm theo tiêu đề hoặc mô tả..."
+              />
+              <select id="banner-status-filter">
+                <option value="">Tất cả trạng thái</option>
+                <option value="active">Đang hiển thị</option>
+                <option value="inactive">Đang ẩn</option>
+              </select>
+              <button class="btn btn-primary" id="banner-create-btn">
+                <i class="fas fa-plus"></i> Thêm banner
+              </button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="banners-table">
+              <thead>
+                <tr>
+                  <th>Thứ tự</th>
+                  <th>Banner</th>
+                  <th>CTA</th>
+                  <th>Điểm đến</th>
+                  <th>Trạng thái</th>
+                  <th>Lịch hiển thị</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="banners-tbody"></tbody>
+            </table>
+          </div>
+          <div class="table-actions">
+            <button class="btn btn-secondary" id="banner-refresh-btn">
+              <i class="fas fa-sync-alt"></i> Tải lại
+            </button>
+            <button class="btn btn-success" id="banner-save-order-btn">
+              <i class="fas fa-save"></i> Lưu thứ tự
+            </button>
+          </div>
+          <div class="pagination" id="banners-pagination"></div>
         </div>
       </div>
     </div>
@@ -334,16 +466,16 @@
       </div>
     </div>
 
-    <!-- Voucher Modal -->
+    <!-- Modal mã giảm giá -->
     <div id="voucherModal" class="modal">
       <div class="modal-content" style="max-width: 600px">
         <span class="close">&times;</span>
-        <h2 id="voucher-modal-title">Tạo Voucher Mới</h2>
+        <h2 id="voucher-modal-title">Tạo mã giảm giá mới</h2>
         <form id="voucher-form">
           <input type="hidden" id="voucher-id" />
 
           <div class="form-group">
-            <label>Mã Voucher: <span style="color: red">*</span></label>
+            <label>Mã giảm giá: <span style="color: red">*</span></label>
             <input
               type="text"
               id="voucher-code"
@@ -366,7 +498,7 @@
             <textarea
               id="voucher-description"
               rows="3"
-              placeholder="Mô tả chi tiết voucher..."
+              placeholder="Mô tả chi tiết mã giảm giá..."
             ></textarea>
           </div>
 
@@ -435,21 +567,198 @@
           <div class="form-group">
             <label>
               <input type="checkbox" id="voucher-is-active" checked />
-              Kích Hoạt Voucher
+              Kích hoạt mã giảm giá
             </label>
           </div>
 
           <button type="submit" class="btn btn-primary btn-block">
-            Lưu Voucher
+            Lưu mã giảm giá
           </button>
         </form>
+      </div>
+    </div>
+
+    <!-- Modal quản lý banner -->
+    <div id="bannerModal" class="modal">
+      <div class="modal-content" style="max-width: 720px">
+        <span class="close">&times;</span>
+        <h2 id="banner-modal-title">Thêm banner mới</h2>
+        <form id="banner-form">
+          <input type="hidden" id="banner-id" />
+
+          <div class="form-group">
+            <label>Tiêu đề <span style="color: red">*</span></label>
+            <input type="text" id="banner-title" required />
+          </div>
+
+          <div class="form-group">
+            <label>Phụ đề</label>
+            <input type="text" id="banner-subtitle" />
+          </div>
+
+          <div class="form-group">
+            <label>Mô tả ngắn</label>
+            <textarea id="banner-description" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>CTA / nút kêu gọi</label>
+            <input type="text" id="banner-cta" placeholder="VD: Mua ngay" />
+          </div>
+
+          <div class="form-group">
+            <label>Danh mục mục tiêu</label>
+            <input
+              type="text"
+              id="banner-category"
+              placeholder="Tên danh mục chính xác để mở AllProducts"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Đường dẫn tuỳ chỉnh</label>
+            <input
+              type="url"
+              id="banner-redirect"
+              placeholder="https://..."
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Bắt đầu hiển thị</label>
+              <input type="datetime-local" id="banner-start" />
+            </div>
+            <div class="form-group">
+              <label>Kết thúc hiển thị</label>
+              <input type="datetime-local" id="banner-end" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Hình ảnh banner <span style="color: red">*</span></label>
+            <input type="hidden" id="banner-image-url" required />
+            <div class="banner-image-field">
+              <img
+                id="banner-preview"
+                src=""
+                alt="Banner preview"
+                class="banner-preview"
+              />
+              <div class="banner-upload-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  id="banner-select-image"
+                >
+                  <i class="fas fa-upload"></i> Chọn ảnh
+                </button>
+                <small>Ảnh đề xuất 1200x400px. Dung lượng &lt; 2MB.</small>
+              </div>
+              <input
+                type="file"
+                id="banner-file-input"
+                accept="image/*"
+                style="display: none"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="banner-active" checked />
+              Hiển thị ngay
+            </label>
+          </div>
+
+          <div class="banner-detail-section banner-form-products-section">
+            <div class="section-heading">
+              <h3>Sản phẩm nằm trên banner</h3>
+              <span class="form-helper">Tối đa 10 sản phẩm hiển thị cùng banner</span>
+            </div>
+            <div id="banner-form-products" class="banner-products-list empty-state">
+              <i class="fas fa-box-open"></i>
+              <p>Chưa chọn sản phẩm cho banner này</p>
+            </div>
+
+            <div class="banner-detail-section banner-form-search">
+              <h4>Thêm sản phẩm trong kho</h4>
+              <div class="banner-search-field">
+                <input
+                  type="text"
+                  id="banner-form-product-search"
+                  placeholder="Nhập tên sản phẩm để tìm..."
+                />
+                <small>Gõ từ khóa (≥ 2 ký tự) để tìm kiếm và thêm sản phẩm.</small>
+              </div>
+              <div id="banner-form-product-results" class="banner-search-results">
+                <p class="search-placeholder">Nhập từ khóa để bắt đầu tìm kiếm</p>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block">
+            Lưu banner
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div id="bannerDetailModal" class="modal">
+      <div class="modal-content banner-detail-modal">
+        <span class="close">&times;</span>
+        <div class="banner-detail-body">
+          <div class="banner-detail-header">
+            <img
+              id="banner-detail-image"
+              src="https://via.placeholder.com/600x200?text=Banner"
+              alt="Banner preview"
+            />
+            <div class="banner-detail-info">
+              <h2 id="banner-detail-title">Banner</h2>
+              <p id="banner-detail-description">Chi tiết banner sẽ hiển thị tại đây.</p>
+              <div class="banner-detail-meta">
+                <span id="banner-detail-status" class="status-pill status-warning">Đang tải</span>
+                <span id="banner-detail-schedule" class="meta-chip">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="banner-detail-section">
+            <div class="section-heading">
+              <h3>Sản phẩm đang hiển thị</h3>
+              <button class="btn btn-primary" id="banner-detail-save-btn">
+                <i class="fas fa-save"></i> Lưu danh sách sản phẩm
+              </button>
+            </div>
+            <div id="banner-linked-products" class="banner-products-list empty-state">
+              <i class="fas fa-box-open"></i>
+              <p>Chưa chọn sản phẩm cho banner này</p>
+            </div>
+          </div>
+
+          <div class="banner-detail-section">
+            <h3>Thêm sản phẩm vào banner</h3>
+            <div class="banner-search-field">
+              <input
+                type="text"
+                id="banner-product-search"
+                placeholder="Nhập tên sản phẩm..."
+              />
+              <small>Gõ ≥ 2 ký tự để tìm sản phẩm trong kho.</small>
+            </div>
+            <div id="banner-product-results" class="banner-search-results">
+              <p class="search-placeholder">Nhập từ khóa để bắt đầu tìm kiếm</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- Modal for Feedback Response -->
     <div id="feedbackModal" class="modal">
       <div class="modal-content">
         <span class="close">&times;</span>
-        <h2>Phản Hồi Feedback</h2>
+        <h2>Phản Hồi Yêu Cầu</h2>
         <form id="feedback-response-form">
           <input type="hidden" id="feedback-id" />
           <div class="form-group">
@@ -457,6 +766,7 @@
             <select id="feedback-response-status" required>
               <option value="Pending">Chờ xử lý</option>
               <option value="In Progress">Đang xử lý</option>
+              <option value="WaitingRequester">Chờ phản hồi</option>
               <option value="Resolved">Đã giải quyết</option>
               <option value="Closed">Đã đóng</option>
             </select>
@@ -465,7 +775,7 @@
             <label>Độ ưu tiên:</label>
             <select id="feedback-priority">
               <option value="Low">Thấp</option>
-              <option value="Medium">Trung bình</option>
+              <option value="Normal">Bình thường</option>
               <option value="High">Cao</option>
               <option value="Urgent">Khẩn cấp</option>
             </select>
@@ -501,6 +811,15 @@
       </div>
     </div>
 
+    <!-- Modal hồ sơ tài xế -->
+    <div id="shipperDetailModal" class="modal">
+      <div class="modal-content" style="max-width: 900px">
+        <span class="close">&times;</span>
+        <h2>Chi Tiết Hồ Sơ Tài Xế</h2>
+        <div id="shipper-detail-content"></div>
+      </div>
+    </div>
+
     <!-- Login Modal -->
     <div id="loginModal" class="modal active">
       <div class="modal-content">
@@ -531,6 +850,8 @@
     <script src="js/orders.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/vouchers.js"></script>
+    <script src="js/shippers.js"></script>
+    <script src="js/banners.js"></script>
     <script src="js/main.js"></script>
   </body>
 </html>

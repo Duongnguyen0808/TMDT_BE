@@ -13,5 +13,6 @@ router.get(
 );
 
 router.get("/:ratingType/:product", ratingController.getRatings);
+router.get("/mine", verifyTokenAndAuthorization, ratingController.getUserRatings);
 
 module.exports = router;

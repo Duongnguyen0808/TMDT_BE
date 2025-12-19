@@ -1,9 +1,46 @@
 const Order = require("../models/Order");
+const DriverWalletTopup = require("../models/DriverWalletTopup");
+const { creditWallet } = require("../utils/driverWallet");
 const {
   buildVnpParams,
   createPaymentUrl,
   verifySecureHash,
 } = require("../utils/vnpay");
+
+// Chuẩn hoá dữ liệu trả về từ VNPay để lưu cùng Order/Topup
+const gatewayPayloadFromQuery = (query = {}) => ({
+  paymentGatewayTxnId: query["vnp_TransactionNo"] || "",
+  paymentGatewayTxnDate: query["vnp_PayDate"] || "",
+  paymentGatewayBankCode: query["vnp_BankCode"] || "",
+  paymentGatewayTrace: query["vnp_BankTranNo"] || "",
+  paymentGatewayPayload: query,
+});
+
+// Xử lý IPN riêng cho giao dịch nạp ví tài xế
+async function handleWalletIpn(topup, query, rspCode) {
+  if (!topup) {
+    return { response: { RspCode: "01", Message: "Order not found" } };
+  }
+
+  if (rspCode === "00") {
+    if (topup.status !== "Completed") {
+      await creditWallet(topup.driver, topup.amount, {
+        description: `VNPay top-up #${topup._id}`,
+        reference: query["vnp_TransactionNo"] || topup.paymentReference,
+        metadata: { source: "vnpay", payload: query },
+      });
+      topup.markCompleted(query["vnp_TransactionNo"], query);
+      await topup.save();
+    }
+    return { response: { RspCode: "00", Message: "Wallet topup success" }, isWallet: true };
+  }
+
+  if (topup.status === "Pending") {
+    topup.markFailed(query);
+    await topup.save();
+  }
+  return { response: { RspCode: "00", Message: "Wallet topup failed" }, isWallet: true };
+}
 
 // POST /api/orders/payment
 // Body: { userId, cartItems: [{ name, id: orderId, price, quantity, storeId }] }
@@ -27,6 +64,7 @@ const createVnpayPayment = async (req, res) => {
     }
 
     // Calculate amount from cart items
+    // Tổng tiền dựa trên từng dòng cart để hạn chế client gửi amount tuỳ ý
     const amount = cartItems.reduce((sum, item) => {
       const price = Number(item.price);
       const qty = Number(item.quantity || 1);
@@ -75,6 +113,7 @@ const createVnpayPayment = async (req, res) => {
       expireMinutes: 15,
     });
 
+    // VNPay yêu cầu ký tham số => createPaymentUrl sẽ append signature hợp lệ
     const url = createPaymentUrl(vnpUrl, params, hashSecret);
 
     return res.status(200).json({ url });
@@ -104,23 +143,37 @@ const vnpayReturn = async (req, res) => {
       return res.status(400).send("Missing vnp_TxnRef");
     }
 
+    const order = await Order.findById(txnRef);
+    const walletTopup = order ? null : await DriverWalletTopup.findById(txnRef);
+
+    if (!order && !walletTopup) {
+      return res.status(404).send("Không tìm thấy giao dịch");
+    }
+
     if (!isValid) {
-      await Order.findByIdAndUpdate(txnRef, {
-        paymentStatus: "Failed",
-        paymentMethod: "VNPay",
-      });
+      if (order) {
+        await Order.findByIdAndUpdate(txnRef, {
+          paymentStatus: "Failed",
+          paymentMethod: "VNPay",
+          ...gatewayPayloadFromQuery(query),
+        });
+      } else if (walletTopup) {
+        walletTopup.markFailed(query);
+        await walletTopup.save();
+      }
       return res
         .status(200)
         .send(`Invalid signature. vnp_ResponseCode=${rspCode || ""}`);
     }
 
-    if (rspCode === "00") {
-      await Order.findByIdAndUpdate(txnRef, {
-        paymentStatus: "Completed",
-        paymentMethod: "VNPay",
-      });
-      // Simple HTML page for mobile WebView to detect success
-      return res.status(200).send(`<!doctype html>
+    if (order) {
+      if (rspCode === "00") {
+        await Order.findByIdAndUpdate(txnRef, {
+          paymentStatus: "Completed",
+          paymentMethod: "VNPay",
+          ...gatewayPayloadFromQuery(query),
+        });
+        return res.status(200).send(`<!doctype html>
         <html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
         <body style="font-family:sans-serif;text-align:center;padding:24px;">
           <h3>Thanh toán thành công</h3>
@@ -128,10 +181,12 @@ const vnpayReturn = async (req, res) => {
           <a href="/checkout-success" id="success-link">Tiếp tục</a>
           <script>window.location.href='/checkout-success';</script>
         </body></html>`);
-    } else {
+      }
+
       await Order.findByIdAndUpdate(txnRef, {
         paymentStatus: "Failed",
         paymentMethod: "VNPay",
+        ...gatewayPayloadFromQuery(query),
       });
       return res.status(200).send(`<!doctype html>
         <html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
@@ -142,6 +197,31 @@ const vnpayReturn = async (req, res) => {
           <script>window.location.href='/cancel';</script>
         </body></html>`);
     }
+
+    // Wallet top-up branch
+    if (rspCode === "00") {
+      walletTopup.paymentData = query;
+      await walletTopup.save();
+      return res.status(200).send(`<!doctype html>
+        <html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
+        <body style="font-family:sans-serif;text-align:center;padding:24px;">
+          <h3>Nạp ví thành công</h3>
+          <p>Thanh toán đã được ghi nhận, số dư sẽ cập nhật sau ít phút.</p>
+          <a href="/wallet-success" id="success-link">Đóng</a>
+          <script>window.location.href='/wallet-success';</script>
+        </body></html>`);
+    }
+
+    walletTopup.markFailed(query);
+    await walletTopup.save();
+    return res.status(200).send(`<!doctype html>
+        <html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
+        <body style="font-family:sans-serif;text-align:center;padding:24px;">
+          <h3>Nạp ví thất bại</h3>
+          <p>Mã phản hồi: ${rspCode}</p>
+          <a href="/wallet-failed" id="failed-link">Quay lại</a>
+          <script>window.location.href='/wallet-failed';</script>
+        </body></html>`);
   } catch (error) {
     console.error("[VNPay][return] error:", error);
     return res.status(500).send("Xử lý VNPay Return thất bại");
@@ -170,20 +250,29 @@ const vnpayIpn = async (req, res) => {
         .status(200)
         .json({ RspCode: "97", Message: "Invalid signature" });
     }
-
-    if (rspCode === "00") {
-      await Order.findByIdAndUpdate(txnRef, {
-        paymentStatus: "Completed",
-        paymentMethod: "VNPay",
-      });
-      return res.status(200).json({ RspCode: "00", Message: "Success" });
-    } else {
+    const order = await Order.findById(txnRef);
+    if (order) {
+      if (rspCode === "00") {
+        await Order.findByIdAndUpdate(txnRef, {
+          paymentStatus: "Completed",
+          paymentMethod: "VNPay",
+          ...gatewayPayloadFromQuery(query),
+        });
+        return res.status(200).json({ RspCode: "00", Message: "Success" });
+      }
       await Order.findByIdAndUpdate(txnRef, {
         paymentStatus: "Failed",
         paymentMethod: "VNPay",
+        ...gatewayPayloadFromQuery(query),
       });
-      return res.status(200).json({ RspCode: "00", Message: "Failed updated" });
+      return res
+        .status(200)
+        .json({ RspCode: "00", Message: "Failed updated" });
     }
+
+    const walletTopup = await DriverWalletTopup.findById(txnRef);
+    const walletResult = await handleWalletIpn(walletTopup, query, rspCode);
+    return res.status(200).json(walletResult.response);
   } catch (error) {
     console.error("[VNPay][ipn] error:", error);
     return res.status(200).json({ RspCode: "99", Message: "Unknown error" });
